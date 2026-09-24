@@ -148,27 +148,42 @@ def load_case_file(case_id: str) -> dict:
 # -----------------------------------------------------------------------------
 # Top Navigation & Header
 # -----------------------------------------------------------------------------
-logo_path = ASSETS_DIR / "hacker_house.png"
-goa_svg_path = ASSETS_DIR / "goa_hindi.svg"
+# Crisp scalloped logo badge (inline SVG — sharp at any size, matches banner plates)
+LOGO_SVG = """
+<svg viewBox='0 0 64 64' width='100%' height='100%' xmlns='http://www.w3.org/2000/svg' aria-label='Hacker House Goa'>
+  <g fill='#FFFFFF'>
+    <circle cx='32' cy='32' r='25'/><circle cx='32' cy='8' r='6'/><circle cx='49' cy='15' r='6'/>
+    <circle cx='56' cy='32' r='6'/><circle cx='49' cy='49' r='6'/><circle cx='32' cy='56' r='6'/>
+    <circle cx='15' cy='49' r='6'/><circle cx='8' cy='32' r='6'/><circle cx='15' cy='15' r='6'/>
+  </g>
+  <circle cx='32' cy='32' r='21.5' fill='none' stroke='#FEE101' stroke-width='1.6' stroke-dasharray='3.2 2.6'/>
+  <text x='32' y='27' text-anchor='middle' font-family='Plus Jakarta Sans, sans-serif' font-weight='900' font-size='10.2' letter-spacing='0.5' fill='#0B6839'>HACKER</text>
+  <text x='32' y='38.5' text-anchor='middle' font-family='Plus Jakarta Sans, sans-serif' font-weight='900' font-size='10.2' letter-spacing='1.1' fill='#0B6839'>HOUSE</text>
+  <text x='32' y='51.5' text-anchor='middle' font-family='Nirmala UI, Noto Sans Devanagari, sans-serif' font-weight='700' font-size='11' fill='#0B6839'>गोवा</text>
+</svg>
+"""
 
 col_header_left, col_header_right = st.columns([3, 1])
 
 with col_header_left:
-    st.markdown("""
-        <div style="background: linear-gradient(135deg, #0E7A44 0%, #0B6839 60%, #084D2B 100%); border: 3px solid #F23A7B; border-radius: 14px; padding: 18px 24px; box-shadow: 0 8px 26px rgba(4,38,22,0.5);">
-            <div style="display: flex; align-items: center; gap: 15px;">
-                <div style="font-family: 'Anton', sans-serif; font-size: 36px; color: #FEE101; letter-spacing: 2.5px; line-height: 1; text-shadow: 0 3px 0 rgba(0,0,0,0.35);">
-                    TIGERDETECT
-                </div>
-                <div style="background: #F23A7B; color: #FFFFFF; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 12px; font-weight: 800; padding: 4px 12px; border-radius: 999px; border: 2px solid #FFFFFF; box-shadow: 0 0 12px rgba(242,58,123,0.6);">
-                    HACKER HOUSE × TIGERGRAPH
+    lcol, tcol = st.columns([0.14, 0.86], gap="small", vertical_alignment="center")
+    with lcol:
+        st.markdown(
+            f"<div style='width:64px; height:64px; filter: drop-shadow(0 0 10px rgba(242,58,123,0.5)) drop-shadow(0 2px 4px rgba(64,6,32,0.45));'>{LOGO_SVG}</div>",
+            unsafe_allow_html=True)
+    with tcol:
+        st.markdown("""
+            <div style="background: linear-gradient(135deg, #0E7A44 0%, #0B6839 60%, #084D2B 100%); border: 3px solid #F23A7B; border-radius: 14px; padding: 14px 22px; box-shadow: 0 8px 26px rgba(4,38,22,0.5);">
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <div style="font-family: 'Anton', sans-serif; font-size: 34px; color: #FEE101; letter-spacing: 2.5px; line-height: 1; text-shadow: 0 3px 0 rgba(0,0,0,0.35);">
+                        TIGERDETECT
+                    </div>
+                    <div style="background: #F23A7B; color: #FFFFFF; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 12px; font-weight: 800; padding: 4px 12px; border-radius: 999px; border: 2px solid #FFFFFF; box-shadow: 0 0 12px rgba(242,58,123,0.6);">
+                        HACKER HOUSE × TIGERGRAPH
+                    </div>
                 </div>
             </div>
-            <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #FFFBE8; margin-top: 8px;">
-                Partnership Announcement Edition · Agentic AI Fraud Investigation &amp; Next-Best Action
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
 with col_header_right:
     st.markdown("""
