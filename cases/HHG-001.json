@@ -1,0 +1,118 @@
+{
+  "case_id": "HHG-001",
+  "case": {
+    "status": "closed_legitimate",
+    "verdict": "legitimate",
+    "fraud_probability": 0.15,
+    "pattern": "card_not_present_fraud",
+    "pattern_description": "",
+    "affected_txn_ids": [],
+    "first_suspicious_txn_id": "",
+    "connected_card_ids": [],
+    "connected_device_profiles": [],
+    "exposure_usd": 0.0,
+    "evidence": [
+      {
+        "claim": "Flagged transaction 3514030: $77.07, ProductCD=W, channel=in_person, billing region addr1=444.0, bank risk score 0.61 (real transactions.csv row).",
+        "source": "graph",
+        "ref": "query:(Customer:C12382)-[:OWNS]->(Card:C12382-K1)-[:MADE]->(Transaction:3514030)",
+        "entity_ids": [
+          "3514030",
+          "C12382-K1"
+        ]
+      },
+      {
+        "claim": "Real history for C12382: 421 prior transactions, mean $115.69, max $845.01, 2 online. Flagged amount is 0.7x the cardholder mean.",
+        "source": "graph",
+        "ref": "query:(Customer:C12382)-[:OWNS]->(Card:C12382-K1)-[:MADE]->(Transaction)",
+        "entity_ids": [
+          "3514030",
+          "C12382-K1"
+        ]
+      },
+      {
+        "claim": "Cardholder has 14 prior real transactions in billing region 444.0 — the flagged region is established, not new (pattern 4 requires no history).",
+        "source": "graph",
+        "ref": "query:(Transaction)-[:BILLED_IN]->(BillingRegion:444.0)",
+        "entity_ids": [
+          "3514030",
+          "C12382-K1"
+        ]
+      },
+      {
+        "claim": "transaction_confirmation: Cardholder confirmed the transaction after reviewing the billing descriptor.",
+        "source": "customer",
+        "ref": "evidence_request:1",
+        "entity_ids": []
+      },
+      {
+        "claim": "Prior closed case CC-5558 (confirmed_fraud, card_not_present_fraud) retrieved as memory with time-decay weight 0.6485 (closed 2016-11-06).",
+        "source": "document",
+        "ref": "closed_cases_history.csv:CC-5558",
+        "entity_ids": [
+          "CC-5558"
+        ]
+      },
+      {
+        "claim": "Prior closed case CC-5551 (confirmed_fraud, card_not_present_fraud) retrieved as memory with time-decay weight 0.6465 (closed 2016-11-06).",
+        "source": "document",
+        "ref": "closed_cases_history.csv:CC-5551",
+        "entity_ids": [
+          "CC-5551"
+        ]
+      },
+      {
+        "claim": "Prior closed case CC-5550 (confirmed_fraud, card_not_present_fraud) retrieved as memory with time-decay weight 0.6465 (closed 2016-11-06).",
+        "source": "document",
+        "ref": "closed_cases_history.csv:CC-5550",
+        "entity_ids": [
+          "CC-5550"
+        ]
+      }
+    ],
+    "similar_prior_cases": [
+      "CC-5558",
+      "CC-5551",
+      "CC-5550"
+    ],
+    "summary": "Case HHG-001: cardholder confirmed the transaction. The bank risk score was a reason to look, not a verdict; real graph evidence (history, device, region) supported the legitimate explanation. Closed as legitimate under R3.",
+    "written_to_graph": true,
+    "graph_case_id": "CASE-2016-0001"
+  },
+  "evidence_requests": [
+    {
+      "type": "customer_validation",
+      "asked_after_step": 2,
+      "assumed_response": "Cardholder confirmed the transaction after reviewing the billing descriptor."
+    }
+  ],
+  "next_best_actions": {
+    "initial": [
+      {
+        "action": "VERIFY_WITH_CUSTOMER",
+        "route": "auto",
+        "reason": "R1: single weak signal (risk 0.61 < 0.70); verify before any adverse action."
+      }
+    ],
+    "final": [
+      {
+        "action": "CLOSE_NO_FRAUD",
+        "route": "auto",
+        "reason": "R3: customer confirmed the transaction (verification/step-up passed)."
+      }
+    ],
+    "what_changed": "Evidence requested at step 2 returned (confirmed_authorized), moving the recommendation from VERIFY_WITH_CUSTOMER to CLOSE_NO_FRAUD."
+  },
+  "sar": {
+    "file": false,
+    "reason": "No filing trigger: exposure and pattern do not meet policy 3a criteria.",
+    "narrative": "",
+    "subjects": [],
+    "total_amount_usd": 0,
+    "activity_dates": []
+  },
+  "stop_reason": "Probability 0.15 at or below 0.15 supported by the customer response and real graph evidence (policy §6). Closing as legitimate.",
+  "tool_calls": 11,
+  "tokens": 0,
+  "latency_s": 0.0
+}

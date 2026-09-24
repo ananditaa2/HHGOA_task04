@@ -1,0 +1,127 @@
+{
+  "case_id": "HHG-008",
+  "case": {
+    "status": "closed_fraud",
+    "verdict": "fraud",
+    "fraud_probability": 0.85,
+    "pattern": "card_not_present_fraud",
+    "pattern_description": "",
+    "affected_txn_ids": [
+      "3558054"
+    ],
+    "first_suspicious_txn_id": "3558054",
+    "connected_card_ids": [],
+    "connected_device_profiles": [
+      "chrome 66.0"
+    ],
+    "exposure_usd": 55.68,
+    "evidence": [
+      {
+        "claim": "Flagged transaction 3558054: $55.68, ProductCD=C, channel=online, billing region addr1=n/a, bank risk score 0.38 (real transactions.csv row).",
+        "source": "graph",
+        "ref": "query:(Customer:C13171)-[:OWNS]->(Card:C13171-K2)-[:MADE]->(Transaction:3558054)",
+        "entity_ids": [
+          "3558054",
+          "C13171-K2"
+        ]
+      },
+      {
+        "claim": "Real history for C13171: 927 prior transactions, mean $54.27, max $407.32, 926 online. Flagged amount is 1.0x the cardholder mean.",
+        "source": "graph",
+        "ref": "query:(Customer:C13171)-[:OWNS]->(Card:C13171-K2)-[:MADE]->(Transaction)",
+        "entity_ids": [
+          "3558054",
+          "C13171-K2"
+        ]
+      },
+      {
+        "claim": "identity.csv: device=unspecified, OS=n/a, browser=chrome 66.0, device status=Found, proxy=none.",
+        "source": "graph",
+        "ref": "query:(Transaction:3558054)-[:FROM_DEVICE]->(DeviceProfile:unknown)",
+        "entity_ids": [
+          "3558054",
+          "C13171-K2"
+        ]
+      },
+      {
+        "claim": "fraud_denial: Customer reaffirms the report: they did not make the $55.68 purchase.",
+        "source": "customer",
+        "ref": "evidence_request:1",
+        "entity_ids": []
+      },
+      {
+        "claim": "Prior closed case CC-5558 (confirmed_fraud, card_not_present_fraud) retrieved as memory with time-decay weight 0.5143 (closed 2016-11-06).",
+        "source": "document",
+        "ref": "closed_cases_history.csv:CC-5558",
+        "entity_ids": [
+          "CC-5558"
+        ]
+      },
+      {
+        "claim": "Prior closed case CC-5551 (confirmed_fraud, card_not_present_fraud) retrieved as memory with time-decay weight 0.5127 (closed 2016-11-06).",
+        "source": "document",
+        "ref": "closed_cases_history.csv:CC-5551",
+        "entity_ids": [
+          "CC-5551"
+        ]
+      },
+      {
+        "claim": "Prior closed case CC-5550 (confirmed_fraud, card_not_present_fraud) retrieved as memory with time-decay weight 0.5127 (closed 2016-11-06).",
+        "source": "document",
+        "ref": "closed_cases_history.csv:CC-5550",
+        "entity_ids": [
+          "CC-5550"
+        ]
+      }
+    ],
+    "similar_prior_cases": [
+      "CC-5558",
+      "CC-5551",
+      "CC-5550"
+    ],
+    "summary": "Case HHG-008: cardholder denied the transaction. Pattern: card not present fraud on the real transaction timeline. Card blocked under R2; exposure $55.68. Shared device profile: chrome 66.0.",
+    "written_to_graph": true,
+    "graph_case_id": "CASE-2016-0008"
+  },
+  "evidence_requests": [
+    {
+      "type": "customer_validation",
+      "asked_after_step": 2,
+      "assumed_response": "Customer reaffirms the report: they did not make the $55.68 purchase."
+    }
+  ],
+  "next_best_actions": {
+    "initial": [
+      {
+        "action": "VERIFY_WITH_CUSTOMER",
+        "route": "auto",
+        "reason": "R1/R7: customer disputes the charge; verify with the customer before any block."
+      }
+    ],
+    "final": [
+      {
+        "action": "BLOCK_CARD",
+        "route": "L1",
+        "reason": "R2: customer denied the transaction; exposure $55.68 within the L1 limit."
+      },
+      {
+        "action": "CREATE_CASE",
+        "route": "auto",
+        "reason": "R2: open the internal fraud case."
+      }
+    ],
+    "what_changed": "Evidence requested at step 2 returned (denied_transaction), moving the recommendation from VERIFY_WITH_CUSTOMER to BLOCK_CARD, CREATE_CASE."
+  },
+  "sar": {
+    "file": false,
+    "reason": "No filing trigger: exposure and pattern do not meet policy 3a criteria.",
+    "narrative": "",
+    "subjects": [],
+    "total_amount_usd": 0,
+    "activity_dates": []
+  },
+  "stop_reason": "Probability 0.85 at or above 0.85 with at least two independent evidence pieces (policy §6). Verdict settled; further steps would not change the actions.",
+  "tool_calls": 11,
+  "tokens": 0,
+  "latency_s": 0.0
+}

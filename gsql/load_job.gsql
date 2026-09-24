@@ -1,0 +1,39 @@
+// ==============================================================================
+// TigerDetect High-Speed Data Loading Jobs (FraudGraph)
+// ==============================================================================
+
+USE GRAPH FraudGraph
+
+// -----------------------------------------------------------------------------
+// 1. Load Domain Data
+// -----------------------------------------------------------------------------
+CREATE LOADING JOB load_fraud_domain_data FOR GRAPH FraudGraph {
+    DEFINE FILENAME txn_file;
+    DEFINE FILENAME cust_file;
+    DEFINE FILENAME card_file;
+    DEFINE FILENAME dev_file;
+    DEFINE FILENAME case_file;
+
+    LOAD cust_file TO VERTEX Customer VALUES($0, $1, $2, $3) USING SEPARATOR=",", HEADER="true", EOL="\n";
+    LOAD card_file TO VERTEX Card VALUES($0, $1, $2, $3, $4) USING SEPARATOR=",", HEADER="true", EOL="\n";
+    LOAD dev_file TO VERTEX DeviceProfile VALUES($0, $1, $2, $3, $4, $5, $6) USING SEPARATOR=",", HEADER="true", EOL="\n";
+
+    LOAD txn_file TO VERTEX Transaction VALUES($0, $1, $2, $3, $4, $5, $6, $7, $8) USING SEPARATOR=",", HEADER="true", EOL="\n";
+    LOAD txn_file TO EDGE MADE VALUES($9, $0) USING SEPARATOR=",", HEADER="true", EOL="\n";
+    LOAD txn_file TO EDGE FROM_DEVICE VALUES($0, $10) USING SEPARATOR=",", HEADER="true", EOL="\n";
+    LOAD txn_file TO EDGE BILLED_IN VALUES($0, $11) USING SEPARATOR=",", HEADER="true", EOL="\n";
+
+    LOAD case_file TO VERTEX ClosedCase VALUES($0, $1, $2, $3, $4, $5, $6, $7, $8, $9) USING SEPARATOR=",", HEADER="true", EOL="\n";
+}
+
+// -----------------------------------------------------------------------------
+// 2. Load Policy Graph (Innovation 1: Rules as a Graph)
+// -----------------------------------------------------------------------------
+CREATE LOADING JOB load_policy_graph FOR GRAPH FraudGraph {
+    DEFINE FILENAME policy_rules_file;
+    DEFINE FILENAME policy_edges_file;
+
+    LOAD policy_rules_file TO VERTEX PolicyRule VALUES($0, $1, $2, $3, $4, $5, $6, $7) USING SEPARATOR=",", HEADER="true", EOL="\n";
+    LOAD policy_edges_file TO EDGE OVERRIDES VALUES($0, $1, $2) WHERE $3 == "OVERRIDES" USING SEPARATOR=",", HEADER="true", EOL="\n";
+    LOAD policy_edges_file TO EDGE ESCALATES_TO VALUES($0, $1, $2) WHERE $3 == "ESCALATES_TO" USING SEPARATOR=",", HEADER="true", EOL="\n";
+}

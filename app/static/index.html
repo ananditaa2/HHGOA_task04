@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TigerDetect | Hacker House Goa × TigerGraph Fraud Agent</title>
+  <meta name="description" content="Agentic AI Fraud Investigation & Next-Best Action Platform — TigerGraph × Hacker House Goa (IEEE-CIS Fraud Investigation Edition)" />
+  <link rel="icon" type="image/webp" href="/assets/favicon.webp" />
+  <link rel="stylesheet" href="/static/style.css" />
+  <!-- Vis.js Network for interactive force-directed graph physics -->
+  <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+</head>
+<body>
+
+  <!-- ============================================================================
+       ORNAMENTAL FRAME (partnership-banner pink border around the entire app)
+       ============================================================================ -->
+  <div class="orn-frame">
+    <span class="orn-corner tl">❧</span>
+    <span class="orn-corner tr">❧</span>
+    <span class="orn-corner bl">❧</span>
+    <span class="orn-corner br">❧</span>
+
+  <!-- ============================================================================
+       LOADING SCREEN
+       ============================================================================ -->
+  <div class="loading-overlay" id="loading-screen">
+    <img src="/assets/hacker_house.png" class="loading-logo" alt="Hacker House Goa" />
+    <div class="loading-title">TIGERDETECT</div>
+    <div class="loading-sub">INITIALIZING FRAUD INVESTIGATION ENGINE...</div>
+    <div class="loading-bar-track">
+      <div class="loading-bar-fill"></div>
+    </div>
+  </div>
+
+  <!-- ============================================================================
+       TOP BAR & HACKER HOUSE GOA BRANDING
+       ============================================================================ -->
+  <header class="hh-topbar" id="main-header">
+    <div class="brand-left">
+      <img src="/assets/hacker_house.png" class="brand-logo" alt="HH Goa" />
+      <div>
+        <div class="brand-title">TIGERDETECT</div>
+        <div style="display: flex; align-items: center; gap: 10px; margin-top: 4px;">
+          <div class="badge-goa">HACKER HOUSE &#215; TIGERGRAPH</div>
+          <span class="brand-subtitle">Partnership Announcement Edition &middot; Agentic Fraud Investigation &amp; Next-Best Action</span>
+        </div>
+      </div>
+    </div>
+    <div class="brand-right">
+      <button class="filter-btn" onclick="openSandboxModal()">&#129514; SANDBOX</button>
+      <button class="filter-btn" onclick="runQAAuditModal()">&#128737;&#65039; QA AUDIT</button>
+      <button class="filter-btn" onclick="openPolicyModal()">&#128220; RULES R1-R10</button>
+      <div class="status-pill">
+        <div><span class="live-dot"></span> <span style="color: #00FFA3; font-weight: bold;">DUAL-MODE ENGINE ONLINE</span></div>
+        <div style="color: #FEE101; font-size: 9px; margin-top: 2px;">GOA, INDIA &middot; 28-31 OCT 2026</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============================================================================
+       MARQUEE TICKER
+       ============================================================================ -->
+  <div class="hh-ticker-wrapper">
+    <div class="hh-ticker-track">
+      &#128005; TIGERDETECT &times; HACKER HOUSE GOA &middot; AUTONOMOUS FRAUD INVESTIGATION &amp; NEXT-BEST ACTION PLATFORM &middot; 20 BENCHMARK CASES &middot; TIGERGRAPH MULTI-HOP GRAPH TRAVERSAL &middot; POLICY RULES AS A GRAPH (R1-R10) &middot; TIME-DECAY PRECEDENTS (&tau; = 45d) &middot; EVIDENCE CONFLICT (C &ge; 0.40) &middot; DEVIL'S ADVOCATE ADVERSARIAL CRITIQUE &middot; 100% QA AUDIT PASSED &middot; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &#128005; TIGERDETECT &times; HACKER HOUSE GOA &middot; AUTONOMOUS FRAUD INVESTIGATION &amp; NEXT-BEST ACTION PLATFORM &middot; 20 BENCHMARK CASES &middot; TIGERGRAPH MULTI-HOP GRAPH TRAVERSAL &middot; POLICY RULES AS A GRAPH (R1-R10) &middot; TIME-DECAY PRECEDENTS (&tau; = 45d) &middot; EVIDENCE CONFLICT (C &ge; 0.40) &middot; DEVIL'S ADVOCATE ADVERSARIAL CRITIQUE &middot; 100% QA AUDIT PASSED &middot;
+    </div>
+  </div>
+
+  <!-- ============================================================================
+       GLOBAL KPI STRIP
+       ============================================================================ -->
+  <section class="kpi-strip">
+    <div class="kpi-card">
+      <div class="kpi-label">Benchmark Cases</div>
+      <div class="kpi-value" id="kpi-total-cases">20 / 20</div>
+      <div class="kpi-sub">&#10003; 100% Schema Valid</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Fraud vs Legitimate</div>
+      <div class="kpi-value"><span style="color:#F23A7B;">10</span> / <span style="color:#00FFA3;">10</span></div>
+      <div class="kpi-sub">Half the pack is legitimate</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">FinCEN SARs Filed</div>
+      <div class="kpi-value" style="color: #F23A7B;">2 FILINGS</div>
+      <div class="kpi-sub">HHG-010 (&gt;$1k) &middot; HHG-014 (ring)</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Rule Coverage</div>
+      <div class="kpi-value" style="color: #FEE101;">10 / 10</div>
+      <div class="kpi-sub">Rules R1 - R10 Active</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Graph Engine</div>
+      <div class="kpi-value" style="color: #00E5FF; font-size: 19px;">TIGERGRAPH</div>
+      <div class="kpi-sub">Savanna + Fast In-Memory</div>
+    </div>
+  </section>
+
+  <!-- ============================================================================
+       CASE SELECTOR & FILTER TABS
+       ============================================================================ -->
+  <section class="case-selector-bar">
+    <div class="filter-pills">
+      <span style="font-weight: bold; color: #FEE101; font-size: 10px; letter-spacing: 1px;">FILTER:</span>
+      <button class="filter-btn active" onclick="filterCases('all', this)">ALL (20)</button>
+      <button class="filter-btn" onclick="filterCases('fraud', this)">CONFIRMED FRAUD (10)</button>
+      <button class="filter-btn" onclick="filterCases('legit', this)">CLEARED LEGITIMATE (10)</button>
+      <button class="filter-btn" onclick="filterCases('sar', this)">SAR FILED (2)</button>
+      <button class="filter-btn" onclick="filterCases('ring', this)">DEVICE RING (HHG-014)</button>
+    </div>
+    <div class="cases-scroll-container" id="cases-strip">
+      <!-- Injected by JavaScript -->
+    </div>
+  </section>
+
+  <!-- ============================================================================
+       MAIN WORKSPACE DUAL COLUMN
+       ============================================================================ -->
+  <main class="main-workspace">
+
+    <!-- LEFT COLUMN: GRAPH VISUALIZER + CONFLICT GAUGE + DEVIL'S ADVOCATE -->
+    <div class="workspace-left">
+
+      <!-- Panel 1: Interactive Vis.js Graph Canvas -->
+      <div class="panel-card">
+        <div class="panel-header">
+          <div class="panel-title">&#128376;&#65039; MULTI-HOP GRAPH NEIGHBORHOOD</div>
+          <div style="font-size: 10px; color: #FEE101; display:flex; gap:8px; flex-wrap:wrap;">
+            <span><b style="color:#FFFBE8;">&#9679;</b> Customer</span>
+            <span><b style="color:#FEE101;">&#9679;</b> Card</span>
+            <span><b style="color:#FF0080;">&#9679;</b> Flagged Txn</span>
+            <span><b style="color:#00E5FF;">&#9679;</b> Device</span>
+            <span><b style="color:#A7FF83;">&#9679;</b> Region</span>
+          </div>
+        </div>
+
+        <div class="graph-container-relative">
+          <div class="graph-controls-overlay">
+            <button class="graph-ctrl-btn" onclick="zoomInGraph()" title="Zoom In">+ Zoom</button>
+            <button class="graph-ctrl-btn" onclick="zoomOutGraph()" title="Zoom Out">- Zoom</button>
+            <button class="graph-ctrl-btn" onclick="fitGraph()" title="Fit View">FIT</button>
+            <button class="graph-ctrl-btn" onclick="toggleGraphPhysics()" id="btn-physics-toggle" title="Toggle Physics">FREEZE</button>
+          </div>
+          <div id="graph-canvas"></div>
+        </div>
+
+        <div class="provenance-path-box" id="provenance-path-display">
+          <span style="color: #FEE101; font-weight: bold;">LITERAL GRAPH PATH (INNOVATION 6):</span>
+          <span id="provenance-path-text">Loading graph path...</span>
+        </div>
+
+        <!-- Node Inspector -->
+        <div id="node-inspector-box" style="margin-top: 10px; background: rgba(7,68,36,0.5); border: 1px dashed rgba(254,225,1,0.4); border-radius: 6px; padding: 10px; font-size: 11px; display: none;">
+          <div style="color: #FEE101; font-weight: bold; margin-bottom: 4px;">NODE INSPECTOR:</div>
+          <div id="node-inspector-details" style="color: #FFFBE8;">Select a node in the graph above to view attributes &amp; connections.</div>
+        </div>
+      </div>
+
+      <!-- Panel 2: Evidence Conflict Meter (Rule R8 / Innovation 2) -->
+      <div class="panel-card">
+        <div class="panel-header">
+          <div class="panel-title">EVIDENCE CONFLICT &amp; UNCERTAINTY</div>
+          <div id="uncertainty-pill" class="badge-goa" style="font-size: 10px; padding: 2px 8px;">UNCERTAINTY: LOW</div>
+        </div>
+
+        <div class="conflict-meter-container">
+          <div style="display: flex; justify-content: space-between; font-size: 11px;">
+            <span>Quantitative Conflict Score (C)</span>
+            <span id="conflict-score-val" style="color: #FEE101; font-weight: bold;">0.000 / 1.000</span>
+          </div>
+          <div class="meter-bar-track">
+            <div id="conflict-meter-fill" class="meter-bar-fill"></div>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 9px; color: rgba(255,251,232,0.5);">
+            <span>0.00 (Harmonious)</span>
+            <span style="color: #FF0080; font-weight: bold;">R8 Threshold: 0.40</span>
+            <span>1.00 (Severe)</span>
+          </div>
+        </div>
+
+        <div style="margin-top: 12px;">
+          <div style="font-size: 10px; color: #FEE101; font-weight: bold; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px;">Disagreeing Signals:</div>
+          <div id="conflict-signals-list">
+            <!-- Injected by JavaScript -->
+          </div>
+        </div>
+
+        <!-- Devil's Advocate Adversarial Critique (Innovation 5) -->
+        <div style="margin-top: 14px; background: rgba(7,68,36,0.4); border: 1px solid rgba(254,225,1,0.25); border-radius: 6px; padding: 10px;">
+          <div style="font-size: 10px; color: #FEE101; font-weight: bold; display: flex; justify-content: space-between; text-transform: uppercase; letter-spacing: 0.5px;">
+            <span>DEVIL'S ADVOCATE CHALLENGE (INNOVATION 5)</span>
+            <span id="innocent-score-badge" style="color: #00FFA3;">Innocent P: 0.00</span>
+          </div>
+          <div id="devils-advocate-hypo" style="font-size: 11px; color: #FFFBE8; margin-top: 6px; line-height: 1.5; font-style: italic;">
+            Evaluating innocent explanations...
+          </div>
+        </div>
+      </div>
+
+      <!-- Panel 3: Time-Decay Weighted Case Precedents (Innovation 4) -->
+      <div class="panel-card">
+        <div class="panel-header">
+          <div class="panel-title">TIME-DECAY PRECEDENTS (&tau; = 45 DAYS)</div>
+        </div>
+        <div id="precedents-list" style="display: flex; flex-direction: column; gap: 8px;">
+          <!-- Injected by JavaScript -->
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT COLUMN: ACTION EVOLUTION + SAR + LIVE APPROVALS -->
+    <div class="workspace-right">
+
+      <!-- Active Case Banner -->
+      <div class="active-case-banner">
+        <div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span class="case-hero-id" id="active-case-id">HHG-001</span>
+            <span id="active-verdict-badge" class="badge-goa">LEGITIMATE</span>
+            <span id="active-sar-badge" class="route-badge route-l2" style="display:none;">SAR REQUIRED (L2)</span>
+          </div>
+          <div style="font-size: 11px; color: #FFFBE8; margin-top: 5px;">
+            PATTERN: <span id="active-pattern" style="color: #FEE101; font-weight: bold;">ANOMALY</span> |
+            EXPOSURE: <span id="active-exposure" style="color: #00FFA3; font-weight: bold;">$0.00 USD</span> |
+            FRAUD PROB: <span id="active-prob" style="color: #FF0080; font-weight: bold;">0.0%</span>
+          </div>
+        </div>
+        <div style="text-align: right;">
+          <div style="font-size: 10px; color: #FEE101;">OPENED: <span id="active-opened">2016-12-05</span></div>
+          <div style="font-size: 9px; color: #00FFA3; margin-top: 2px;"><span class="live-dot"></span> CASE MEMORY: COMMITTED</div>
+        </div>
+      </div>
+
+      <!-- Next-Best Action Interactive Stepper -->
+      <div class="panel-card">
+        <div class="panel-header">
+          <div class="panel-title">NEXT-BEST ACTION PROGRESSION</div>
+          <div style="font-size: 10px; color: #FEE101;">INITIAL &rarr; EVIDENCE &rarr; FINAL</div>
+        </div>
+
+        <div class="stepper-list">
+          <!-- Step 1 -->
+          <div class="step-item">
+            <div class="step-dot done"></div>
+            <div class="step-label">1. ALERT TRIGGER INTAKE</div>
+            <div class="step-content" id="step-trigger-desc">Loading trigger details...</div>
+          </div>
+
+          <!-- Step 2 -->
+          <div class="step-item">
+            <div class="step-dot active"></div>
+            <div class="step-label">2. NEXT-BEST ACTIONS (BEFORE EVIDENCE)</div>
+            <div class="step-content" id="step-initial-actions"></div>
+          </div>
+
+          <!-- Step 3 -->
+          <div class="step-item">
+            <div class="step-dot done"></div>
+            <div class="step-label">3. STEP-UP EVIDENCE &amp; CARDHOLDER RESPONSE</div>
+            <div class="step-content" id="step-evidence-sim"></div>
+          </div>
+
+          <!-- Step 4 -->
+          <div class="step-item">
+            <div class="step-dot done"></div>
+            <div class="step-label">4. NEXT-BEST ACTIONS (AFTER EVIDENCE)</div>
+            <div class="step-content" id="step-final-actions"></div>
+          </div>
+        </div>
+
+        <!-- Live Interactive Approval Buttons -->
+        <div style="margin-top: 18px; border-top: 1px dashed rgba(254,225,1,0.3); padding-top: 14px;">
+          <div style="font-size: 10px; color: #FEE101; font-weight: bold; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">
+            HUMAN-IN-THE-LOOP ANALYST CONTROLS:
+          </div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;" id="analyst-controls-bar">
+            <button class="action-exec-btn" onclick="executeAnalystAction('APPROVE_FINAL')">&#10003; EXECUTE FINAL ACTIONS</button>
+            <button class="action-exec-btn" style="background:#FF0080; color:#fff; border-color:#FF0080;" onclick="executeAnalystAction('ESCALATE_SUPERVISOR')">&#9888;&#65039; ESCALATE TO L2</button>
+            <button class="action-exec-btn" style="background:#00FFA3; color:#000; border-color:#00FFA3;" onclick="executeAnalystAction('OVERRIDE_BENIGN')">&#128737;&#65039; OVERRIDE &amp; DISMISS</button>
+          </div>
+          <div id="action-execution-msg" style="margin-top: 8px; font-size: 11px; color: #00FFA3; display: none;"></div>
+        </div>
+      </div>
+
+      <!-- FinCEN SAR Panel -->
+      <div class="sar-box" id="sar-container" style="display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,0,128,0.3); padding-bottom: 6px;">
+          <span style="color: #FF0080; font-weight: bold; font-size: 12px;">MANDATORY BSA/AML FINCEN SAR FILING</span>
+          <button class="filter-btn" style="padding: 2px 8px; font-size: 9px;" onclick="openSARModal()">FULL NARRATIVE &amp; FORM 111</button>
+        </div>
+        <div style="font-size: 11px; color: #FFFBE8; margin-top: 8px;">
+          <span style="color: #FEE101; font-weight: bold;">REASON:</span> <span id="sar-reason-text">Exceeds $1,000 threshold</span>
+        </div>
+        <div class="sar-narrative" id="sar-narrative-preview">Narrative loading...</div>
+      </div>
+
+      <!-- Case Summary Narrative -->
+      <div class="panel-card" style="margin-top: 18px;">
+        <div class="panel-header">
+          <div class="panel-title">CASE INVESTIGATION SUMMARY</div>
+        </div>
+        <div id="case-summary-text" style="font-size: 12px; color: #FFFBE8; line-height: 1.65;">
+          Summary loading...
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- ============================================================================
+       MODAL 1: SANDBOX
+       ============================================================================ -->
+  <div class="modal-overlay" id="sandbox-modal">
+    <div class="modal-content">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #FEE101; padding-bottom: 8px; margin-bottom: 16px;">
+        <div style="font-family: var(--font-heading); font-size: 24px; color: #FEE101;">THE SANDBOX &middot; ON-DEMAND FRAUD DETECTIVE</div>
+        <button class="filter-btn" onclick="closeSandboxModal()">&#10005; CLOSE</button>
+      </div>
+      <div style="font-size: 11px; color: #FFFBE8; margin-bottom: 16px;">
+        Test arbitrary transaction anomalies, customer disputes, and device proxies live through the autonomous multi-agent pipeline.
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+        <div>
+          <label style="font-size: 10px; color: #FEE101; text-transform: uppercase;">Customer ID:</label>
+          <input type="text" id="sb-cust" class="sandbox-input" value="C99999" />
+          <label style="font-size: 10px; color: #FEE101; text-transform: uppercase;">Card ID:</label>
+          <input type="text" id="sb-card" class="sandbox-input" value="C99999-K1" />
+          <label style="font-size: 10px; color: #FEE101; text-transform: uppercase;">Transaction ID:</label>
+          <input type="text" id="sb-txn" class="sandbox-input" value="TXN_SANDBOX_01" />
+        </div>
+        <div>
+          <label style="font-size: 10px; color: #FEE101; text-transform: uppercase;">Amount ($ USD):</label>
+          <input type="number" id="sb-amt" class="sandbox-input" value="1250.00" />
+          <label style="font-size: 10px; color: #FEE101; text-transform: uppercase;">Risk Score (0.0 - 1.0):</label>
+          <input type="number" id="sb-risk" class="sandbox-input" step="0.01" value="0.88" />
+          <label style="font-size: 10px; color: #FEE101; text-transform: uppercase;">Trigger Type:</label>
+          <select id="sb-trigger" class="sandbox-input">
+            <option value="risk_score">risk_score</option>
+            <option value="customer_report">customer_report</option>
+            <option value="analyst_request">analyst_request</option>
+          </select>
+        </div>
+      </div>
+      <div style="display: flex; gap: 15px; margin-bottom: 16px; font-size: 11px;">
+        <label><input type="checkbox" id="sb-proxy" checked /> Anonymous Proxy / Tor</label>
+        <label><input type="checkbox" id="sb-rec" /> Recurring Subscription</label>
+      </div>
+      <div style="margin-bottom: 16px;">
+        <label style="font-size: 10px; color: #FEE101; text-transform: uppercase;">Customer Response Simulation:</label>
+        <select id="sb-response" class="sandbox-input">
+          <option value="denied_transaction">denied_transaction (Customer Denies Fraud)</option>
+          <option value="confirmed_authorized">confirmed_authorized (Customer Validates Travel)</option>
+          <option value="subscription_acknowledged">subscription_acknowledged (Customer Forgot Subscription)</option>
+        </select>
+      </div>
+      <button class="action-exec-btn" style="width: 100%; padding: 10px; font-size: 12px;" onclick="runSandboxInvestigation()">EXECUTE MULTI-AGENT INVESTIGATION</button>
+      <div id="sandbox-results" style="margin-top: 16px; display: none;"></div>
+    </div>
+  </div>
+
+  <!-- ============================================================================
+       MODAL 2: FINCEN SAR
+       ============================================================================ -->
+  <div class="modal-overlay" id="sar-modal">
+    <div class="modal-content">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #FF0080; padding-bottom: 8px; margin-bottom: 16px;">
+        <div style="font-family: var(--font-heading); font-size: 24px; color: #FF0080;">FINCEN SUSPICIOUS ACTIVITY REPORT (FORM 111)</div>
+        <button class="filter-btn" onclick="closeSARModal()">&#10005; CLOSE</button>
+      </div>
+      <div id="sar-modal-body" style="font-size: 12px; line-height: 1.6; color: #FFFBE8;"></div>
+      <div style="margin-top: 18px; display: flex; justify-content: flex-end; gap: 10px;">
+        <button class="filter-btn" onclick="copySARNarrative()">COPY NARRATIVE</button>
+        <button class="action-exec-btn" onclick="window.print()">PRINT FORM</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================================
+       MODAL 3: QA AUDIT
+       ============================================================================ -->
+  <div class="modal-overlay" id="qa-modal">
+    <div class="modal-content">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #FEE101; padding-bottom: 8px; margin-bottom: 16px;">
+        <div style="font-family: var(--font-heading); font-size: 24px; color: #FEE101;">20-CASE QA AUDIT SUITE</div>
+        <button class="filter-btn" onclick="closeQAModal()">&#10005; CLOSE</button>
+      </div>
+      <div id="qa-modal-body" style="font-size: 12px; line-height: 1.6; color: #FFFBE8; white-space: pre-wrap; font-family: var(--font-mono); max-height: 500px; overflow-y: auto;">
+        Running audit across all 5 verification dimensions...
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================================
+       MODAL 4: POLICY RULES
+       ============================================================================ -->
+  <div class="modal-overlay" id="policy-modal">
+    <div class="modal-content">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #FEE101; padding-bottom: 8px; margin-bottom: 16px;">
+        <div style="font-family: var(--font-heading); font-size: 24px; color: #FEE101;">POLICY RULES AS A GRAPH (R1 - R10)</div>
+        <button class="filter-btn" onclick="closePolicyModal()">&#10005; CLOSE</button>
+      </div>
+      <div style="font-size: 11px; color: #FFFBE8; margin-bottom: 12px;">
+        Rules are <code style="color:#FEE101;">PolicyRule</code> vertices in TigerGraph, connected by <code style="color:#FEE101;">OVERRIDES</code> and <code style="color:#FEE101;">ESCALATES_TO</code> edges traversed dynamically during investigation.
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px; font-size: 11px;" id="policy-rules-container">
+        <!-- Injected by JavaScript -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================================
+       FOOTER
+       ============================================================================ -->
+  <footer class="hh-footer">
+    <div>
+      <strong style="color: #FEE101;">TigerDetect v1.0</strong> &middot; Hacker House Goa (IEEE-CIS Fraud Investigation Edition)
+    </div>
+    <div>
+      Built with <span style="color:#FF0080;">&#9829;</span> at <a href="https://hhgoa.com" target="_blank" rel="noopener">hhgoa.com</a> &middot; Powered by <span style="color:#00E5FF; font-weight:bold;">TigerGraph</span>
+    </div>
+  </footer>
+
+  <!-- App Script -->
+  <script src="/static/app.js"></script>
+</div> <!-- /orn-frame -->
+</body>
+</html>

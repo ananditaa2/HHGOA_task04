@@ -1,0 +1,166 @@
+{
+  "case_id": "HHG-010",
+  "case": {
+    "status": "closed_fraud",
+    "verdict": "fraud",
+    "fraud_probability": 0.85,
+    "pattern": "card_not_present_new_device",
+    "pattern_description": "",
+    "affected_txn_ids": [
+      "3506725"
+    ],
+    "first_suspicious_txn_id": "3506725",
+    "connected_card_ids": [],
+    "connected_device_profiles": [
+      "Windows | Windows 10 | edge 16.0 | 1366x768"
+    ],
+    "exposure_usd": 1000.03,
+    "evidence": [
+      {
+        "claim": "Flagged transaction 3506725: $1,000.03, ProductCD=R, channel=online, billing region addr1=469.0, bank risk score 0.90 (real transactions.csv row).",
+        "source": "graph",
+        "ref": "query:(Customer:C10434)-[:OWNS]->(Card:C10434-K1)-[:MADE]->(Transaction:3506725)",
+        "entity_ids": [
+          "3506725",
+          "C10434-K1"
+        ]
+      },
+      {
+        "claim": "Real history for C10434: 35 prior transactions, mean $129.69, max $670.04, 17 online. Flagged amount is 7.7x the cardholder mean.",
+        "source": "graph",
+        "ref": "query:(Customer:C10434)-[:OWNS]->(Card:C10434-K1)-[:MADE]->(Transaction)",
+        "entity_ids": [
+          "3506725",
+          "C10434-K1"
+        ]
+      },
+      {
+        "claim": "identity.csv: device=Windows, OS=Windows 10, browser=edge 16.0, device status=New, proxy=none.",
+        "source": "graph",
+        "ref": "query:(Transaction:3506725)-[:FROM_DEVICE]->(DeviceProfile:Windows)",
+        "entity_ids": [
+          "3506725",
+          "C10434-K1"
+        ]
+      },
+      {
+        "claim": "Device marked New for this account (id_15=New) — consistent with pattern 3, not proof.",
+        "source": "graph",
+        "ref": "query:(Transaction:3506725)-[:FROM_DEVICE]->(DeviceProfile:Windows)",
+        "entity_ids": [
+          "3506725",
+          "C10434-K1"
+        ]
+      },
+      {
+        "claim": "Cardholder has 26 prior real transactions in billing region 469.0 — the flagged region is established, not new (pattern 4 requires no history).",
+        "source": "graph",
+        "ref": "query:(Transaction)-[:BILLED_IN]->(BillingRegion:469.0)",
+        "entity_ids": [
+          "3506725",
+          "C10434-K1"
+        ]
+      },
+      {
+        "claim": "step_up_result: No response to the OTP challenge; the $1,000.03 purchase exceeds 1.25x the cardholder's p95 spend ($669.99) and came from a first-seen device.",
+        "source": "customer",
+        "ref": "evidence_request:1",
+        "entity_ids": []
+      },
+      {
+        "claim": "Prior closed case CC-5556 (confirmed_fraud, card_not_present_new_device) retrieved as memory with time-decay weight 0.6717 (closed 2016-11-06).",
+        "source": "document",
+        "ref": "closed_cases_history.csv:CC-5556",
+        "entity_ids": [
+          "CC-5556"
+        ]
+      },
+      {
+        "claim": "Prior closed case CC-5541 (confirmed_fraud, card_not_present_new_device) retrieved as memory with time-decay weight 0.6701 (closed 2016-11-06).",
+        "source": "document",
+        "ref": "closed_cases_history.csv:CC-5541",
+        "entity_ids": [
+          "CC-5541"
+        ]
+      },
+      {
+        "claim": "Prior closed case CC-5564 (confirmed_fraud, card_not_present_new_device) retrieved as memory with time-decay weight 0.6619 (closed 2016-11-05).",
+        "source": "document",
+        "ref": "closed_cases_history.csv:CC-5564",
+        "entity_ids": [
+          "CC-5564"
+        ]
+      }
+    ],
+    "similar_prior_cases": [
+      "CC-5556",
+      "CC-5541",
+      "CC-5564"
+    ],
+    "summary": "Case HHG-010: cardholder denied the transaction and failed step-up authentication. Pattern: card not present new device on the real transaction timeline. Card blocked under R2; exposure $1,000.03. Shared device profile: Windows | Windows 10 | edge 16.0 | 1366x768.",
+    "written_to_graph": true,
+    "graph_case_id": "CASE-2016-0010"
+  },
+  "evidence_requests": [
+    {
+      "type": "step_up_auth",
+      "asked_after_step": 2,
+      "assumed_response": "No response to the OTP challenge; the $1,000.03 purchase exceeds 1.25x the cardholder's p95 spend ($669.99) and came from a first-seen device."
+    }
+  ],
+  "next_best_actions": {
+    "initial": [
+      {
+        "action": "DECLINE_TRANSACTION",
+        "route": "L1",
+        "reason": "R1: elevated risk score 0.90 with corroborating device signals; contain first."
+      },
+      {
+        "action": "STEP_UP_AUTH",
+        "route": "auto",
+        "reason": "R1: OTP challenge before further activity."
+      },
+      {
+        "action": "STEP_UP_AUTH",
+        "route": "auto",
+        "reason": "Pattern 3: new-device online activity warrants step-up confirmation."
+      }
+    ],
+    "final": [
+      {
+        "action": "BLOCK_CARD",
+        "route": "L1",
+        "reason": "R2: customer denied the transaction; exposure $1,000.03 within the L1 limit."
+      },
+      {
+        "action": "CREATE_CASE",
+        "route": "auto",
+        "reason": "R2: open the internal fraud case."
+      },
+      {
+        "action": "FILE_REPORT",
+        "route": "L2",
+        "reason": "R2: exposure $1,000.03 exceeds $1,000 — SAR required."
+      }
+    ],
+    "what_changed": "Evidence requested at step 2 returned (step_up_failed), moving the recommendation from DECLINE_TRANSACTION, STEP_UP_AUTH, STEP_UP_AUTH to BLOCK_CARD, CREATE_CASE, FILE_REPORT."
+  },
+  "sar": {
+    "file": true,
+    "reason": "Aggregated fraudulent exposure of $1,000.03 USD exceeds the $1,000.00 regulatory threshold.",
+    "narrative": "This Suspicious Activity Report is filed by the Fraud Intelligence and Anti-Money Laundering unit regarding suspected unauthorized financial activity linked to Customer C10434 and Card C10434-K1. The suspicious activity was initially flagged on 2016-12-02 18:18:27 following automated graph anomaly detection and behavioral rule triggers. A total of 1 fraudulent or disputed transaction authorizations totaling $1,000.03 USD were identified, including transaction references: 3506725. The illicit transactions were executed across digital card-not-present payment channels routed through billing region 469.0 utilizing device hardware signature Windows. The modus operandi reflects sophisticated card not present new device characterized by rapid-fire settlement velocity, evasion of standard velocity caps, and deliberate merchant category dispersion. The institution initiated immediate containment protocols, placing administrative holds on the affected accounts and preventing additional financial loss. Investigation corroborated that the legitimate account holder did not authorize these transactions, confirming criminal exploitation. All relevant transaction logs, graph topological neighborhoods, device signatures, and IP routing artifacts have been preserved in institution archives for law enforcement review. The filing institution requests regulatory oversight and will cooperate fully with relevant criminal investigative bodies pursuant to the Bank Secrecy Act.",
+    "subjects": [
+      "C10434",
+      "C10434-K1"
+    ],
+    "total_amount_usd": 1000.03,
+    "activity_dates": [
+      "2016-12-02",
+      "2016-12-02"
+    ]
+  },
+  "stop_reason": "Probability 0.85 at or above 0.85 with at least two independent evidence pieces (policy §6). Verdict settled; further steps would not change the actions.",
+  "tool_calls": 11,
+  "tokens": 0,
+  "latency_s": 0.0
+}

@@ -1,0 +1,197 @@
+// ==============================================================================
+// TigerDetect GSQL Analytical & Graph Algorithms
+// Incorporating Innovations 1, 3, 4, 6
+// ==============================================================================
+
+USE GRAPH FraudGraph
+
+// -----------------------------------------------------------------------------
+// 1. Query: Card Testing Micro-Authorization Detector (Rule R5)
+// -----------------------------------------------------------------------------
+CREATE QUERY query_card_testing(STRING card_id, INT window_hours) FOR GRAPH FraudGraph {
+    ListAccum<VERTEX<Transaction>> @@micro_txns;
+    ListAccum<VERTEX<Transaction>> @@spike_txns;
+    OrAccum @is_micro = false;
+    OrAccum @is_spike = false;
+
+    Start = {Card.*};
+    TargetCard = SELECT c FROM Start:c WHERE c.card_id == card_id;
+
+    // Traverse Card -> Transaction
+    Txns = SELECT t FROM TargetCard:c -(MADE:e)-> Transaction:t
+           ACCUM 
+               IF t.amount < 5.00 THEN
+                   t.@is_micro += true,
+                   @@micro_txns += t
+               ELSE IF t.amount >= 100.00 THEN
+                   t.@is_spike += true,
+                   @@spike_txns += t
+               END;
+
+    PRINT @@micro_txns.size() AS micro_count,
+          @@spike_txns.size() AS spike_count,
+          @@micro_txns AS micro_transactions,
+          @@spike_txns AS spike_transactions;
+}
+
+// -----------------------------------------------------------------------------
+// 2. Query: Device Ring Centrality & Ranking (Innovation 3 for Case HHG-014)
+// Computes Degree Centrality and local hub ranking across connected cards
+// -----------------------------------------------------------------------------
+CREATE QUERY query_device_ring_centrality(STRING device_id, INT window_days) FOR GRAPH FraudGraph {
+    SumAccum<INT> @degree_centrality = 0;
+    SumAccum<DOUBLE> @pagerank = 1.0;
+    ListAccum<STRING> @@connected_cards;
+    ListAccum<STRING> @@hub_cards;
+
+    StartDev = {DeviceProfile.*};
+    TargetDev = SELECT d FROM StartDev:d WHERE d.device_id == device_id;
+
+    // 1-Hop: Device <- Transaction
+    DevTxns = SELECT t FROM TargetDev:d <-(FROM_DEVICE:e)- Transaction:t;
+
+    // 2-Hop: Transaction <- Card
+    RingCards = SELECT c FROM DevTxns:t <-(MADE:e)- Card:c
+                ACCUM c.@degree_centrality += 1,
+                      @@connected_cards += c.card_id
+                POST-ACCUM
+                    IF c.@degree_centrality >= 2 THEN
+                        c.@pagerank += 0.85 * c.@degree_centrality
+                    END
+                ORDER BY c.@degree_centrality DESC;
+
+    PRINT RingCards[RingCards.card_id, RingCards.@degree_centrality, RingCards.@pagerank] AS ranked_cards,
+          @@connected_cards AS all_connected_cards;
+}
+
+// -----------------------------------------------------------------------------
+// 3. Query: Out-of-Region Geographical Velocity Anomaly
+// -----------------------------------------------------------------------------
+CREATE QUERY query_out_of_region(STRING customer_id, STRING txn_id) FOR GRAPH FraudGraph {
+    SumAccum<INT> @@home_region_txns = 0;
+    SumAccum<INT> @@flagged_region_txns = 0;
+    STRING home_reg;
+    STRING flagged_reg;
+
+    StartCust = {Customer.*};
+    TargetCust = SELECT c FROM StartCust:c WHERE c.customer_id == customer_id
+                 POST-ACCUM home_reg = c.home_region;
+
+    StartTxn = {Transaction.*};
+    TargetTxn = SELECT t FROM StartTxn:t WHERE t.txn_id == txn_id;
+
+    // Get flagged txn region
+    FlaggedRegion = SELECT r FROM TargetTxn:t -(BILLED_IN:e)-> BillingRegion:r
+                    POST-ACCUM flagged_reg = r.region_code;
+
+    // Historical transactions of customer
+    CustTxns = SELECT t FROM TargetCust:c -(OWNS:e1)-> Card:k -(MADE:e2)-> Transaction:t -(BILLED_IN:e3)-> BillingRegion:r
+               ACCUM
+                   IF r.region_code == home_reg THEN
+                       @@home_region_txns += 1
+                   ELSE IF r.region_code == flagged_reg THEN
+                       @@flagged_region_txns += 1
+                   END;
+
+    PRINT home_reg, flagged_reg, @@home_region_txns, @@flagged_region_txns;
+}
+
+// -----------------------------------------------------------------------------
+// 4. Query: Time-Decay Weighted Case Precedent Retrieval (Innovation 4)
+// Exponential half-life: W(dt) = exp(-0.69315 * dt / 45.0)
+// -----------------------------------------------------------------------------
+CREATE QUERY query_similar_closed_cases(STRING device_id, STRING region_id, DATETIME alert_date) FOR GRAPH FraudGraph {
+    SumAccum<DOUBLE> @time_weight = 0.0;
+    ListAccum<VERTEX<ClosedCase>> @@ranked_precedents;
+
+    StartCases = {ClosedCase.*};
+    MatchingCases = SELECT c FROM StartCases:c -(INVOLVES:e1)-> Transaction:t
+                    WHERE (t.channel == "online" OR t.product_cd == "W")
+                    POST-ACCUM
+                        DOUBLE dt_days = datetime_diff(alert_date, c.closed_at) / 86400.0,
+                        IF dt_days >= 0 THEN
+                            c.@time_weight = exp(-0.693147 * dt_days / 45.0)
+                        ELSE
+                            c.@time_weight = 1.0
+                        END
+                    ORDER BY c.@time_weight DESC
+                    LIMIT 5;
+
+    PRINT MatchingCases[MatchingCases.case_id, MatchingCases.outcome, MatchingCases.pattern, MatchingCases.@time_weight] AS precedents;
+}
+
+// -----------------------------------------------------------------------------
+// 5. Query: Dynamic Policy Graph Traversal (Innovation 1: Rules as a Graph)
+// Dynamically resolves OVERRIDES and ESCALATES_TO edges
+// -----------------------------------------------------------------------------
+CREATE QUERY traverse_policy_graph(
+    DOUBLE fraud_prob, 
+    DOUBLE conflict_score, 
+    DOUBLE exposure_usd, 
+    BOOL customer_denied, 
+    BOOL ring_detected
+) FOR GRAPH FraudGraph {
+    ListAccum<STRING> @@active_rule_ids;
+    ListAccum<STRING> @@overridden_rule_ids;
+    ListAccum<STRING> @@escalated_routes;
+    STRING primary_action = "MONITOR_CARD";
+    STRING approval_route = "auto";
+
+    AllRules = {PolicyRule.*};
+
+    // Stage 1: Candidate rule selection by fraud probability & criteria
+    CandidateRules = SELECT r FROM AllRules:r
+                     WHERE fraud_prob >= r.min_fraud_prob AND fraud_prob <= r.max_fraud_prob
+                     ACCUM @@active_rule_ids += r.rule_id;
+
+    // Stage 2: Traverse OVERRIDES edges
+    OverriddenRules = SELECT target FROM CandidateRules:r -(OVERRIDES:e)-> PolicyRule:target
+                      ACCUM 
+                          IF (customer_denied AND r.rule_id == "R2") OR (fraud_prob >= 0.85) THEN
+                              @@overridden_rule_ids += target.rule_id
+                          END;
+
+    // Stage 3: Traverse ESCALATES_TO edges for conflicts (Rule R8) or large rings (Rule R9)
+    EscalatedRules = SELECT target FROM AllRules:r -(ESCALATES_TO:e)-> PolicyRule:target
+                     WHERE (r.rule_id == "R8" AND conflict_score >= 0.40) OR
+                           (r.rule_id == "R9" AND (exposure_usd > 1000.0 OR ring_detected))
+                     ACCUM @@escalated_routes += target.default_route;
+
+    PRINT @@active_rule_ids, @@overridden_rule_ids, @@escalated_routes;
+}
+
+// -----------------------------------------------------------------------------
+// 6. Query: Case Memory Persistence (Innovation 6)
+// Writes finalized investigation back into the graph
+// -----------------------------------------------------------------------------
+CREATE QUERY write_investigation_case_memory(
+    STRING case_id,
+    DATETIME opened_at,
+    DATETIME closed_at,
+    STRING status,
+    STRING verdict,
+    DOUBLE fraud_probability,
+    STRING pattern,
+    DOUBLE exposure_usd,
+    STRING summary,
+    STRING card_id,
+    STRING device_id
+) FOR GRAPH FraudGraph {
+    INSERT INTO InvestigationCase (
+        PRIMARY_ID, opened_at, closed_at, status, verdict, fraud_probability,
+        pattern, exposure_usd, summary, written_to_graph
+    ) VALUES (
+        case_id, opened_at, closed_at, status, verdict, fraud_probability,
+        pattern, exposure_usd, summary, true
+    );
+
+    IF card_id != "" THEN
+        INSERT INTO CASE_ON_CARD (FROM, TO) VALUES (case_id, card_id);
+    END;
+
+    IF device_id != "" THEN
+        INSERT INTO CASE_LINKED_DEVICE (FROM, TO) VALUES (case_id, device_id);
+    END;
+
+    PRINT "Case successfully committed to graph memory" AS status;
+}

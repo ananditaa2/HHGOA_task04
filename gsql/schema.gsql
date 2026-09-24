@@ -1,0 +1,76 @@
+// ==============================================================================
+// TigerDetect Schema Definition (FraudGraph)
+// Incorporating Strategic Innovation 1: Policy Rules as a Graph
+// and Strategic Innovation 6: Persistent Case Memory
+// ==============================================================================
+
+CREATE GRAPH FraudGraph()
+
+// -----------------------------------------------------------------------------
+// 1. Core Domain Vertices (IEEE-CIS Fraud Benchmark)
+// -----------------------------------------------------------------------------
+CREATE VERTEX Customer(PRIMARY_ID customer_id STRING, created_at DATETIME, home_region STRING, risk_tier STRING) WITH STATS="OUTDEGREE_BY_EDGETYPE"
+CREATE VERTEX Card(PRIMARY_ID card_id STRING, card_network STRING, card_type STRING, issuer_code STRING, status STRING)
+CREATE VERTEX Transaction(PRIMARY_ID txn_id STRING, ts DATETIME, amount DOUBLE, channel STRING, risk_score DOUBLE, product_cd STRING, is_pending BOOL, merchant_id STRING, is_recurring BOOL)
+CREATE VERTEX DeviceProfile(PRIMARY_ID device_id STRING, device_info STRING, os STRING, browser STRING, screen STRING, is_proxy BOOL, first_seen DATETIME)
+CREATE VERTEX EmailDomain(PRIMARY_ID domain STRING, is_disposable BOOL)
+CREATE VERTEX BillingRegion(PRIMARY_ID region_code STRING, country_code STRING, risk_index DOUBLE)
+CREATE VERTEX ClosedCase(PRIMARY_ID case_id STRING, opened_at DATETIME, closed_at DATETIME, outcome STRING, pattern STRING, exposure_usd DOUBLE, n_txns INT, actions_taken STRING, report_filed BOOL, analyst_notes STRING)
+
+// -----------------------------------------------------------------------------
+// 2. Innovation 1: Policy Rules as a Graph Vertices
+// -----------------------------------------------------------------------------
+CREATE VERTEX PolicyRule(
+    PRIMARY_ID rule_id STRING, 
+    rule_name STRING, 
+    action STRING, 
+    default_route STRING, 
+    trigger_criteria STRING, 
+    min_fraud_prob DOUBLE, 
+    max_fraud_prob DOUBLE, 
+    priority INT
+)
+
+// -----------------------------------------------------------------------------
+// 3. Dynamic Case Memory Vertices
+// -----------------------------------------------------------------------------
+CREATE VERTEX InvestigationCase(
+    PRIMARY_ID case_id STRING, 
+    opened_at DATETIME, 
+    closed_at DATETIME, 
+    status STRING, 
+    verdict STRING, 
+    fraud_probability DOUBLE, 
+    pattern STRING, 
+    exposure_usd DOUBLE, 
+    summary STRING, 
+    written_to_graph BOOL,
+    evidence_trail STRING
+)
+
+// -----------------------------------------------------------------------------
+// 4. Core Domain Edges
+// -----------------------------------------------------------------------------
+CREATE DIRECTED EDGE OWNS(FROM Customer, TO Card)
+CREATE DIRECTED EDGE MADE(FROM Card, TO Transaction)
+CREATE DIRECTED EDGE FROM_DEVICE(FROM Transaction, TO DeviceProfile)
+CREATE DIRECTED EDGE PURCHASER_EMAIL(FROM Transaction, TO EmailDomain)
+CREATE DIRECTED EDGE BILLED_IN(FROM Transaction, TO BillingRegion)
+CREATE DIRECTED EDGE NEXT(FROM Transaction, TO Transaction, interval_s INT)
+CREATE DIRECTED EDGE INVOLVES(FROM ClosedCase, TO Transaction)
+CREATE DIRECTED EDGE ON_CARD(FROM ClosedCase, TO Card)
+CREATE DIRECTED EDGE CONNECTED_TO(FROM ClosedCase, TO Card)
+
+// -----------------------------------------------------------------------------
+// 5. Innovation 1: Policy Graph Edges (Dynamic Rule Hierarchy & Escalation)
+// -----------------------------------------------------------------------------
+CREATE DIRECTED EDGE OVERRIDES(FROM PolicyRule, TO PolicyRule, condition STRING)
+CREATE DIRECTED EDGE ESCALATES_TO(FROM PolicyRule, TO PolicyRule, escalation_reason STRING)
+CREATE DIRECTED EDGE REQUIRES_EVIDENCE(FROM PolicyRule, TO STRING)
+
+// -----------------------------------------------------------------------------
+// 6. Dynamic Case Memory Edges
+// -----------------------------------------------------------------------------
+CREATE DIRECTED EDGE CASE_INVOLVES(FROM InvestigationCase, TO Transaction)
+CREATE DIRECTED EDGE CASE_ON_CARD(FROM InvestigationCase, TO Card)
+CREATE DIRECTED EDGE CASE_LINKED_DEVICE(FROM InvestigationCase, TO DeviceProfile)

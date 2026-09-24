@@ -1,0 +1,34 @@
+# ==============================================================================
+# TigerDetect — Python
+# ==============================================================================
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# ==============================================================================
+# Environment & secrets ( NEVER commit — see .env.example )
+# ==============================================================================
+.env
+.env.*
+!.env.example
+
+# ==============================================================================
+# Large data files ( transactions.csv is ~676 MB — exceeds GitHub's 100 MB
+# hard limit. Download separately; loaders in src/data/real_data.py read it
+# locally from the project root. )
+# ==============================================================================
+transactions.csv
+*.csv.gz
+*.zip
+
+# ==============================================================================
+# Local runtime artifacts
+# ==============================================================================
+server.log
+*.log
+.DS_Store
+Thumbs.db

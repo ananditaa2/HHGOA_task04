@@ -1,0 +1,141 @@
+{
+  "case_id": "HHG-011",
+  "case": {
+    "status": "closed_fraud",
+    "verdict": "fraud",
+    "fraud_probability": 0.85,
+    "pattern": "card_not_present_new_device",
+    "pattern_description": "",
+    "affected_txn_ids": [
+      "3583368"
+    ],
+    "first_suspicious_txn_id": "3583368",
+    "connected_card_ids": [],
+    "connected_device_profiles": [
+      "SM-G610F Build/NRD90M | chrome 66.0 for android"
+    ],
+    "exposure_usd": 131.3,
+    "evidence": [
+      {
+        "claim": "Flagged transaction 3583368: $131.30, ProductCD=C, channel=online, billing region addr1=n/a, bank risk score 0.39 (real transactions.csv row).",
+        "source": "graph",
+        "ref": "query:(Customer:C11923)-[:OWNS]->(Card:C11923-K2)-[:MADE]->(Transaction:3583368)",
+        "entity_ids": [
+          "3583368",
+          "C11923-K2"
+        ]
+      },
+      {
+        "claim": "Real history for C11923: 10360 prior transactions, mean $39.45, max $486.52, 10360 online. Flagged amount is 3.3x the cardholder mean.",
+        "source": "graph",
+        "ref": "query:(Customer:C11923)-[:OWNS]->(Card:C11923-K2)-[:MADE]->(Transaction)",
+        "entity_ids": [
+          "3583368",
+          "C11923-K2"
+        ]
+      },
+      {
+        "claim": "identity.csv: device=SM-G610F Build/NRD90M, OS=n/a, browser=chrome 66.0 for android, device status=New, proxy=none.",
+        "source": "graph",
+        "ref": "query:(Transaction:3583368)-[:FROM_DEVICE]->(DeviceProfile:SM-G610F Build/NRD90M)",
+        "entity_ids": [
+          "3583368",
+          "C11923-K2"
+        ]
+      },
+      {
+        "claim": "Device marked New for this account (id_15=New) — consistent with pattern 3, not proof.",
+        "source": "graph",
+        "ref": "query:(Transaction:3583368)-[:FROM_DEVICE]->(DeviceProfile:SM-G610F Build/NRD90M)",
+        "entity_ids": [
+          "3583368",
+          "C11923-K2"
+        ]
+      },
+      {
+        "claim": "fraud_denial: Customer reaffirms the report: they did not make the $131.30 purchase and do not recognise the device.",
+        "source": "customer",
+        "ref": "evidence_request:1",
+        "entity_ids": []
+      },
+      {
+        "claim": "Prior closed case CC-5556 (confirmed_fraud, card_not_present_new_device) retrieved as memory with time-decay weight 0.4466 (closed 2016-11-06).",
+        "source": "document",
+        "ref": "closed_cases_history.csv:CC-5556",
+        "entity_ids": [
+          "CC-5556"
+        ]
+      },
+      {
+        "claim": "Prior closed case CC-5541 (confirmed_fraud, card_not_present_new_device) retrieved as memory with time-decay weight 0.4454 (closed 2016-11-06).",
+        "source": "document",
+        "ref": "closed_cases_history.csv:CC-5541",
+        "entity_ids": [
+          "CC-5541"
+        ]
+      },
+      {
+        "claim": "Prior closed case CC-5564 (confirmed_fraud, card_not_present_new_device) retrieved as memory with time-decay weight 0.44 (closed 2016-11-05).",
+        "source": "document",
+        "ref": "closed_cases_history.csv:CC-5564",
+        "entity_ids": [
+          "CC-5564"
+        ]
+      }
+    ],
+    "similar_prior_cases": [
+      "CC-5556",
+      "CC-5541",
+      "CC-5564"
+    ],
+    "summary": "Case HHG-011: cardholder denied the transaction. Pattern: card not present new device on the real transaction timeline. Card blocked under R2; exposure $131.30. Shared device profile: SM-G610F Build/NRD90M | chrome 66.0 for android.",
+    "written_to_graph": true,
+    "graph_case_id": "CASE-2016-0011"
+  },
+  "evidence_requests": [
+    {
+      "type": "customer_validation",
+      "asked_after_step": 2,
+      "assumed_response": "Customer reaffirms the report: they did not make the $131.30 purchase and do not recognise the device."
+    }
+  ],
+  "next_best_actions": {
+    "initial": [
+      {
+        "action": "VERIFY_WITH_CUSTOMER",
+        "route": "auto",
+        "reason": "R1/R7: customer disputes the charge; verify with the customer before any block."
+      },
+      {
+        "action": "STEP_UP_AUTH",
+        "route": "auto",
+        "reason": "Pattern 3: new-device online activity warrants step-up confirmation."
+      }
+    ],
+    "final": [
+      {
+        "action": "BLOCK_CARD",
+        "route": "L1",
+        "reason": "R2: customer denied the transaction; exposure $131.30 within the L1 limit."
+      },
+      {
+        "action": "CREATE_CASE",
+        "route": "auto",
+        "reason": "R2: open the internal fraud case."
+      }
+    ],
+    "what_changed": "Evidence requested at step 2 returned (denied_transaction), moving the recommendation from VERIFY_WITH_CUSTOMER, STEP_UP_AUTH to BLOCK_CARD, CREATE_CASE."
+  },
+  "sar": {
+    "file": false,
+    "reason": "No filing trigger: exposure and pattern do not meet policy 3a criteria.",
+    "narrative": "",
+    "subjects": [],
+    "total_amount_usd": 0,
+    "activity_dates": []
+  },
+  "stop_reason": "Probability 0.85 at or above 0.85 with at least two independent evidence pieces (policy §6). Verdict settled; further steps would not change the actions.",
+  "tool_calls": 11,
+  "tokens": 0,
+  "latency_s": 0.8
+}

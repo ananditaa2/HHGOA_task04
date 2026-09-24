@@ -1,0 +1,123 @@
+{
+  "case_id": "HHG-018",
+  "case": {
+    "status": "closed_legitimate",
+    "verdict": "legitimate",
+    "fraud_probability": 0.2,
+    "pattern": "card_not_present_fraud",
+    "pattern_description": "",
+    "affected_txn_ids": [],
+    "first_suspicious_txn_id": "",
+    "connected_card_ids": [],
+    "connected_device_profiles": [],
+    "exposure_usd": 0.0,
+    "evidence": [
+      {
+        "claim": "Flagged transaction 3491361: $39.08, ProductCD=W, channel=in_person, billing region addr1=126.0, bank risk score 0.48 (real transactions.csv row).",
+        "source": "graph",
+        "ref": "query:(Customer:C02354)-[:OWNS]->(Card:C02354-K2)-[:MADE]->(Transaction:3491361)",
+        "entity_ids": [
+          "3491361",
+          "C02354-K2"
+        ]
+      },
+      {
+        "claim": "Real history for C02354: 7090 prior transactions, mean $141.16, max $4,438.01, 552 online. Flagged amount is 0.3x the cardholder mean.",
+        "source": "graph",
+        "ref": "query:(Customer:C02354)-[:OWNS]->(Card:C02354-K2)-[:MADE]->(Transaction)",
+        "entity_ids": [
+          "3491361",
+          "C02354-K2"
+        ]
+      },
+      {
+        "claim": "Cardholder has 685 prior real transactions in billing region 126.0 — the flagged region is established, not new (pattern 4 requires no history).",
+        "source": "graph",
+        "ref": "query:(Transaction)-[:BILLED_IN]->(BillingRegion:126.0)",
+        "entity_ids": [
+          "3491361",
+          "C02354-K2"
+        ]
+      },
+      {
+        "claim": "subscription_acknowledgment: On review the customer recognised the charge: $39.08 recurs in their own transaction history (11 prior charges at the same amount) — a subscription they had forgotten. They will cancel it via the merchant.",
+        "source": "customer",
+        "ref": "evidence_request:1",
+        "entity_ids": []
+      },
+      {
+        "claim": "Prior closed case CC-5558 (confirmed_fraud, card_not_present_fraud) retrieved as memory with time-decay weight 0.7276 (closed 2016-11-06).",
+        "source": "document",
+        "ref": "closed_cases_history.csv:CC-5558",
+        "entity_ids": [
+          "CC-5558"
+        ]
+      },
+      {
+        "claim": "Prior closed case CC-5551 (confirmed_fraud, card_not_present_fraud) retrieved as memory with time-decay weight 0.7253 (closed 2016-11-06).",
+        "source": "document",
+        "ref": "closed_cases_history.csv:CC-5551",
+        "entity_ids": [
+          "CC-5551"
+        ]
+      },
+      {
+        "claim": "Prior closed case CC-5550 (confirmed_fraud, card_not_present_fraud) retrieved as memory with time-decay weight 0.7253 (closed 2016-11-06).",
+        "source": "document",
+        "ref": "closed_cases_history.csv:CC-5550",
+        "entity_ids": [
+          "CC-5550"
+        ]
+      }
+    ],
+    "similar_prior_cases": [
+      "CC-5558",
+      "CC-5551",
+      "CC-5550"
+    ],
+    "summary": "Case HHG-018: the disputed $39.08 charge matches a recurring billing cadence present in the cardholder's real transaction history. Rule R7: case opened, customer informed, card left active.",
+    "written_to_graph": true,
+    "graph_case_id": "CASE-2016-0018"
+  },
+  "evidence_requests": [
+    {
+      "type": "customer_validation",
+      "asked_after_step": 2,
+      "assumed_response": "On review the customer recognised the charge: $39.08 recurs in their own transaction history (11 prior charges at the same amount) — a subscription they had forgotten. They will cancel it via the merchant."
+    }
+  ],
+  "next_best_actions": {
+    "initial": [
+      {
+        "action": "VERIFY_WITH_CUSTOMER",
+        "route": "auto",
+        "reason": "R1/R7: customer disputes the charge; verify with the customer before any block."
+      }
+    ],
+    "final": [
+      {
+        "action": "CREATE_CASE",
+        "route": "auto",
+        "reason": "R7: disputed recurring charge; keep the case record for the dispute."
+      },
+      {
+        "action": "WARN_CUSTOMER",
+        "route": "auto",
+        "reason": "R7: recurring charge matches the cardholder's own cadence; educate, do not block."
+      }
+    ],
+    "what_changed": "Evidence requested at step 2 returned (subscription_acknowledged), moving the recommendation from VERIFY_WITH_CUSTOMER to CREATE_CASE, WARN_CUSTOMER."
+  },
+  "sar": {
+    "file": false,
+    "reason": "No filing trigger: exposure and pattern do not meet policy 3a criteria.",
+    "narrative": "",
+    "subjects": [],
+    "total_amount_usd": 0,
+    "activity_dates": []
+  },
+  "stop_reason": "Probability 0.20 at or below 0.15 supported by the customer response and real graph evidence (policy §6). Closing as legitimate.",
+  "tool_calls": 11,
+  "tokens": 0,
+  "latency_s": 0.1
+}

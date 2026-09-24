@@ -1,0 +1,155 @@
+{
+  "case_id": "HHG-015",
+  "case": {
+    "status": "closed_fraud",
+    "verdict": "fraud",
+    "fraud_probability": 0.85,
+    "pattern": "card_not_present_new_device",
+    "pattern_description": "",
+    "affected_txn_ids": [
+      "3464869"
+    ],
+    "first_suspicious_txn_id": "3464869",
+    "connected_card_ids": [],
+    "connected_device_profiles": [
+      "Trident/7.0 | Windows 8.1 | ie 11.0 for desktop | 1680x1050"
+    ],
+    "exposure_usd": 599.94,
+    "evidence": [
+      {
+        "claim": "Flagged transaction 3464869: $599.94, ProductCD=R, channel=online, billing region addr1=327.0, bank risk score 0.77 (real transactions.csv row).",
+        "source": "graph",
+        "ref": "query:(Customer:C03042)-[:OWNS]->(Card:C03042-K1)-[:MADE]->(Transaction:3464869)",
+        "entity_ids": [
+          "3464869",
+          "C03042-K1"
+        ]
+      },
+      {
+        "claim": "Real history for C03042: 78 prior transactions, mean $138.74, max $550.03, 60 online. Flagged amount is 4.3x the cardholder mean.",
+        "source": "graph",
+        "ref": "query:(Customer:C03042)-[:OWNS]->(Card:C03042-K1)-[:MADE]->(Transaction)",
+        "entity_ids": [
+          "3464869",
+          "C03042-K1"
+        ]
+      },
+      {
+        "claim": "identity.csv: device=Trident/7.0, OS=Windows 8.1, browser=ie 11.0 for desktop, device status=New, proxy=none.",
+        "source": "graph",
+        "ref": "query:(Transaction:3464869)-[:FROM_DEVICE]->(DeviceProfile:Trident/7.0)",
+        "entity_ids": [
+          "3464869",
+          "C03042-K1"
+        ]
+      },
+      {
+        "claim": "Device marked New for this account (id_15=New) — consistent with pattern 3, not proof.",
+        "source": "graph",
+        "ref": "query:(Transaction:3464869)-[:FROM_DEVICE]->(DeviceProfile:Trident/7.0)",
+        "entity_ids": [
+          "3464869",
+          "C03042-K1"
+        ]
+      },
+      {
+        "claim": "Cardholder has 1 prior real transactions in billing region 327.0 — the flagged region is established, not new (pattern 4 requires no history).",
+        "source": "graph",
+        "ref": "query:(Transaction)-[:BILLED_IN]->(BillingRegion:327.0)",
+        "entity_ids": [
+          "3464869",
+          "C03042-K1"
+        ]
+      },
+      {
+        "claim": "step_up_result: No response to the OTP challenge; the $599.94 purchase exceeds 1.25x the cardholder's p95 spend ($444.93) and came from a first-seen device.",
+        "source": "customer",
+        "ref": "evidence_request:1",
+        "entity_ids": []
+      },
+      {
+        "claim": "Prior closed case CC-5556 (confirmed_fraud, card_not_present_new_device) retrieved as memory with time-decay weight 0.8459 (closed 2016-11-06).",
+        "source": "document",
+        "ref": "closed_cases_history.csv:CC-5556",
+        "entity_ids": [
+          "CC-5556"
+        ]
+      },
+      {
+        "claim": "Prior closed case CC-5541 (confirmed_fraud, card_not_present_new_device) retrieved as memory with time-decay weight 0.8438 (closed 2016-11-06).",
+        "source": "document",
+        "ref": "closed_cases_history.csv:CC-5541",
+        "entity_ids": [
+          "CC-5541"
+        ]
+      },
+      {
+        "claim": "Prior closed case CC-5564 (confirmed_fraud, card_not_present_new_device) retrieved as memory with time-decay weight 0.8336 (closed 2016-11-05).",
+        "source": "document",
+        "ref": "closed_cases_history.csv:CC-5564",
+        "entity_ids": [
+          "CC-5564"
+        ]
+      }
+    ],
+    "similar_prior_cases": [
+      "CC-5556",
+      "CC-5541",
+      "CC-5564"
+    ],
+    "summary": "Case HHG-015: cardholder denied the transaction and failed step-up authentication. Pattern: card not present new device on the real transaction timeline. Card blocked under R2; exposure $599.94. Shared device profile: Trident/7.0 | Windows 8.1 | ie 11.0 for desktop | 1680x1050.",
+    "written_to_graph": true,
+    "graph_case_id": "CASE-2016-0015"
+  },
+  "evidence_requests": [
+    {
+      "type": "step_up_auth",
+      "asked_after_step": 2,
+      "assumed_response": "No response to the OTP challenge; the $599.94 purchase exceeds 1.25x the cardholder's p95 spend ($444.93) and came from a first-seen device."
+    }
+  ],
+  "next_best_actions": {
+    "initial": [
+      {
+        "action": "DECLINE_TRANSACTION",
+        "route": "L1",
+        "reason": "R1: elevated risk score 0.77 with corroborating device signals; contain first."
+      },
+      {
+        "action": "STEP_UP_AUTH",
+        "route": "auto",
+        "reason": "R1: OTP challenge before further activity."
+      },
+      {
+        "action": "STEP_UP_AUTH",
+        "route": "auto",
+        "reason": "Pattern 3: new-device online activity warrants step-up confirmation."
+      }
+    ],
+    "final": [
+      {
+        "action": "BLOCK_CARD",
+        "route": "L1",
+        "reason": "R2: customer denied the transaction; exposure $599.94 within the L1 limit."
+      },
+      {
+        "action": "CREATE_CASE",
+        "route": "auto",
+        "reason": "R2: open the internal fraud case."
+      }
+    ],
+    "what_changed": "Evidence requested at step 2 returned (step_up_failed), moving the recommendation from DECLINE_TRANSACTION, STEP_UP_AUTH, STEP_UP_AUTH to BLOCK_CARD, CREATE_CASE."
+  },
+  "sar": {
+    "file": false,
+    "reason": "No filing trigger: exposure and pattern do not meet policy 3a criteria.",
+    "narrative": "",
+    "subjects": [],
+    "total_amount_usd": 0,
+    "activity_dates": []
+  },
+  "stop_reason": "Probability 0.85 at or above 0.85 with at least two independent evidence pieces (policy §6). Verdict settled; further steps would not change the actions.",
+  "tool_calls": 11,
+  "tokens": 0,
+  "latency_s": 0.0
+}
