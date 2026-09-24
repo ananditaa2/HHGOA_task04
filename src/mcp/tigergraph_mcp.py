@@ -193,16 +193,19 @@ class TigerGraphMCPServer:
             v_type = arguments.get("vertex_type", "")
             v_id = arguments.get("vertex_id", "")
             attrs = arguments.get("attributes", {})
-            node_key = f"{v_type}:{v_id}"
-            self.adapter.in_memory.add_vertex(node_key, **attrs)
-            return {"status": "SUCCESS", "vertex_id": node_key}
+            self.adapter.in_memory.add_vertex(v_type, v_id, attrs)
+            if self.adapter.is_live:
+                self.adapter.tg_client.upsert_vertex(v_type, v_id, attrs)
+            return {"status": "SUCCESS", "vertex_id": f"{v_type}:{v_id}"}
 
         elif tool_name == "tigergraph_upsert_edge":
             e_type = arguments.get("edge_type", "")
             from_id = arguments.get("from_id", "")
             to_id = arguments.get("to_id", "")
             attrs = arguments.get("attributes", {})
-            self.adapter.in_memory.add_edge(from_id, to_id, _edge_type=e_type, **attrs)
+            from_type, from_vertex = from_id.split(":", 1) if ":" in from_id else ("Unknown", from_id)
+            to_type, to_vertex = to_id.split(":", 1) if ":" in to_id else ("Unknown", to_id)
+            self.adapter.in_memory.add_edge(e_type, from_type, from_vertex, to_type, to_vertex, attrs)
             return {"status": "SUCCESS", "edge": f"({from_id})-[:{e_type}]->({to_id})"}
 
         elif tool_name == "tigergraph_execute_gsql":

@@ -8,6 +8,8 @@ from src.config import GRAPH_BACKEND_MODE
 from src.graph.in_memory_engine import InMemoryGraphEngine
 from src.graph.tigergraph_client import TigerGraphClient
 from src.graph.policy_graph import PolicyGraphEngine
+from src.data.real_data import STORE
+from src.rag.vector_store import LightweightVectorStore
 
 
 class GraphAdapter:
@@ -17,6 +19,8 @@ class GraphAdapter:
         self.policy_graph = PolicyGraphEngine()
         self.tg_client = TigerGraphClient()
         self.is_live = False
+        self.vector_store = LightweightVectorStore()
+        self._vectors_loaded = False
 
         if self.mode == "tigergraph":
             self.is_live = self.tg_client.check_connection()
@@ -51,10 +55,55 @@ class GraphAdapter:
         return self.in_memory.query_out_of_region(customer_id, txn_id)
 
     def query_similar_closed_cases(self, pattern: str, alert_date_str: str, limit: int = 3) -> List[Dict[str, Any]]:
+        self._load_vectors()
+        query = f"pattern {pattern} alert_date {alert_date_str}"
+        results = self.vector_store.search(query, limit)
+        if results:
+            return results
         return self.in_memory.query_similar_closed_cases(pattern, alert_date_str, limit)
+
+    def _load_vectors(self) -> None:
+        if self._vectors_loaded:
+            return
+        closed_cases = STORE.get_closed_cases()
+        for case in closed_cases:
+            self.vector_store.add(
+                case,
+                " ".join(str(case.get(field, "")) for field in (
+                    "outcome", "pattern", "actions_taken", "analyst_notes", "txn_ids"
+                )),
+            )
+            graph_case = self.in_memory.get_vertex("ClosedCase", case.get("case_id", ""))
+            if graph_case is not None:
+                graph_case["embedding_dimensions"] = self.vector_store.dimensions
+                graph_case["embedding_indexed"] = True
+        self._vectors_loaded = True
+
+    def get_transaction(self, txn_id: str) -> Optional[Dict[str, Any]]:
+        """Return a transaction from the local graph or live TigerGraph."""
+        local = self.in_memory.get_vertex("Transaction", str(txn_id))
+        if local:
+            return local
+        if self.is_live:
+            result = self.tg_client.get_vertex("Transaction", str(txn_id))
+            if result:
+                return result
+        return None
 
     def evaluate_policy_graph(self, **kwargs) -> Dict[str, Any]:
         return self.policy_graph.evaluate_policy(**kwargs)
 
     def commit_case_memory(self, case_id: str, case_data: Dict[str, Any]) -> bool:
-        return self.in_memory.commit_case_memory(case_id, case_data)
+        committed = self.in_memory.commit_case_memory(case_id, case_data)
+        if self.is_live:
+            self.tg_client.upsert_vertex("InvestigationCase", case_id, {
+                "case_id": case_id,
+                "status": case_data.get("status", "closed"),
+                "verdict": case_data.get("verdict", ""),
+                "fraud_probability": case_data.get("fraud_probability", 0.0),
+                "pattern": case_data.get("pattern", ""),
+                "exposure_usd": case_data.get("exposure_usd", 0.0),
+                "summary": case_data.get("summary", ""),
+                "written_to_graph": True,
+            })
+        return committed

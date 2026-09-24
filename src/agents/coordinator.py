@@ -16,6 +16,7 @@ from src.agents.evidence_simulator import EvidenceSimulatorAgent
 from src.agents.policy_engine import PolicyEngineAgent
 from src.data.real_data import STORE, card_ids_for, card_display_id
 from src.graph.graph_adapter import GraphAdapter
+from src.agents.narrative_agent import NarrativeAgent
 
 
 def _f(v, default=0.0) -> float:
@@ -35,6 +36,7 @@ class InvestigationCoordinator:
         self.critic = CriticAgent()
         self.simulator = EvidenceSimulatorAgent()
         self.policy_engine = PolicyEngineAgent()
+        self.narrative_agent = NarrativeAgent()
         self.tool_calls = 0
 
     # ------------------------------------------------------------------
@@ -86,6 +88,7 @@ class InvestigationCoordinator:
         # ---- Assemble README answer format ------------------------------
         answer = self._build_answer(context, precedents, graph_case_id,
                                     start_time)
+        answer["analyst_narrative"] = self.narrative_agent.generate(answer)
         return answer
 
     # ------------------------------------------------------------------

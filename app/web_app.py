@@ -211,6 +211,16 @@ async def run_custom_investigation(req: CustomInvestigateRequest):
     return result
 
 
+@app.get("/api/investigate/{txn_id}")
+async def investigate_transaction(txn_id: str):
+    """Run the full agent pipeline for a real case-pack transaction ID."""
+    match = next((row for row in STORE.get_case_pack()
+                  if row.get("flagged_txn_id") == txn_id), None)
+    if not match:
+        raise HTTPException(status_code=404, detail="Transaction is not a flagged case-pack transaction")
+    return coordinator.investigate(match)
+
+
 @app.post("/api/action/approve")
 async def approve_action(payload: Dict[str, Any]):
     action_name = payload.get("action")

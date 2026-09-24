@@ -185,6 +185,33 @@ Load the closed-case narratives, this README's pattern section, the policy, and 
 
 IEEE-CIS Fraud Detection dataset, Vesta Corporation, via the IEEE Computational Intelligence Society. Customers, calendar, channel, risk scores, closed cases, and the case pack were added by TigerGraph for the Hacker House Goa 2026 task. A small number of rows were added to seed investigation exercises.
 
+## Local and Live Setup
+
+The default backend is the dependency-light in-memory graph. From the repository root:
+
+```powershell
+pip install -r requirements.txt
+pytest -q
+python -m uvicorn app.web_app:app --reload
+```
+
+The web API accepts a real case-pack transaction at `GET /api/investigate/{txn_id}`. The response includes graph evidence, retrieved closed-case precedents, policy actions, SAR output, and an analyst narrative. The narrative is deterministic by default. Set `NARRATIVE_LLM_ENABLED=true`, `OPENAI_API_KEY`, and optionally `NARRATIVE_LLM_URL` and `NARRATIVE_LLM_MODEL` to enable the optional OpenAI-compatible analyst call.
+
+For TigerGraph Savanna or Community Edition, copy `.env.example` to `.env`, set `TG_HOST`, `TG_GRAPH`, and either `TG_API_TOKEN` or the instance credentials, then preview deployment with:
+
+```powershell
+python scripts/deploy_tigergraph.py --dry-run
+python scripts/deploy_tigergraph.py --stream --activate
+```
+
+The deployment script installs `schema.gsql`, `load_job.gsql`, and `fraud_queries.gsql`, runs smoke queries, streams bounded CSV batches through REST++, and persists `GRAPH_BACKEND_MODE=tigergraph` in `.env`. The adapter falls back to the in-memory engine if a live query or connection is unavailable.
+
+## Data Download and Limitations
+
+`transactions.csv` is the large benchmark file and is intentionally not committed to lightweight source distributions. Download the provided benchmark archive from the Hacker House Goa submission, place `transactions.csv` beside `case_pack.csv`, and verify that `identity.csv`, `closed_cases_history.csv`, and `case_pack.csv` are present before starting the app. The application never retrieves the original public IEEE-CIS/Kaggle outcomes.
+
+Local precedent retrieval uses deterministic hashed token vectors with cosine similarity and no heavy embedding dependency. It indexes all 5,565 closed cases in process; a live TigerGraph deployment can replace this index with native vector storage. Customer and analyst replies remain explicit deterministic simulations unless an external evidence provider is added, and REST++ CSV streaming requires a reachable TigerGraph instance with permissions to write the target graph.
+
 ---
 
 # Fraud Policy
