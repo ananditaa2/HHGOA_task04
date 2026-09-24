@@ -38,10 +38,17 @@ class TigerGraphClient:
         self.gsql_port = 443 if parsed.scheme == "https" else 14240
 
     def _restpp(self, path: str) -> str:
-        return f"{self.host}:{self.restpp_port}{path}"
+        parsed = urlparse(self.host)
+        base = self.host if parsed.port else f"{self.host}:{self.restpp_port}"
+        return f"{base}{path}"
 
     def _gsql(self) -> str:
-        return f"{self.host}:{self.gsql_port}/gsqlserver/gsql"
+        parsed = urlparse(self.host)
+        if parsed.port and parsed.scheme != "https":
+            base = f"{parsed.scheme}://{parsed.hostname}:{self.gsql_port}"
+        else:
+            base = self.host if parsed.port else f"{self.host}:{self.gsql_port}"
+        return f"{base}/gsqlserver/gsql"
 
     def check_connection(self) -> bool:
         try:

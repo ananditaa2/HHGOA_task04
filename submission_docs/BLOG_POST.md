@@ -140,6 +140,22 @@ Specialized GSQL queries include:
 
 ---
 
+## 4.5 Platform Engineering: Vector Retrieval, MCP, and Live Investigations
+
+Beyond the case pack, TigerDetect ships as a hardened platform:
+
+**Vector precedent retrieval (graph + vector storage and retrieval).** All **5,565 closed cases** are embedded with a dependency-light hashed-token encoder and ranked by cosine similarity in `src/rag/vector_store.py`. The store sits behind the same adapter contract as the graph, so a live TigerGraph deployment can swap in native vector search without touching agent code. Each `ClosedCase` vertex records `embedding_indexed` and `embedding_dimensions`, keeping graph and vector views in sync.
+
+**TigerGraph MCP server.** `src/mcp/tigergraph_mcp.py` exposes **7 tools conforming to the official tigergraph-mcp specification** — schema introspection, installed-query execution (card testing, device-ring centrality, out-of-region, precedents), 1/2-hop neighborhood expansion, vertex/edge upserts, raw GSQL execution, and tool discovery — so any MCP-compatible AI assistant can drive the graph directly.
+
+**One-command Savanna/CE deployment.** `python scripts/deploy_tigergraph.py` installs `schema.gsql` → `load_job.gsql` → `fraud_queries.gsql`, streams `closed_cases_history.csv` and bounded batches of `transactions.csv` through REST++ upserts (`--stream`), runs smoke queries against real case-pack IDs, and flips the runtime to the live backend (`--activate`). The client derives REST++/GSQL ports from `TG_HOST`, so the same code targets Savanna cloud hosts (443) and local Community Edition (9000/14240). The adapter falls back to the in-memory engine per query if a live call fails.
+
+**Live on-demand investigations.** `GET /api/investigate/{txn_id}` runs the full six-agent pipeline on any flagged transaction in real time — type a transaction ID, watch the agents work. The FastAPI app (`app/web_app.py`) also serves the 20-case overview, per-case vis.js graph topology, and the QA audit endpoint.
+
+**Tested.** An 8-test pytest suite covers the CSV loaders, the coordinator's README-format output, the schema validator's SAR/verdict consistency rules, the narrative fallback, all 7 MCP tools, vector retrieval, and the deploy dry-run — plus a 6-vector QA audit that passes 100% across all 20 case files.
+
+---
+
 ## 5. Official Hacker House Goa Brand Identity System
 
 The Analyst Workbench UI was built using the official design tokens from `hhgoa.com/brand-kit`:
