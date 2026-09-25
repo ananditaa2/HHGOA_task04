@@ -24,6 +24,38 @@ def _f(v, default=0.0) -> float:
         return default
 
 
+def _vertex_attributes(value: Any) -> Dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    attributes = value.get("attributes")
+    if isinstance(attributes, dict):
+        return {
+            key: item.get("value") if isinstance(item, dict) and "value" in item else item
+            for key, item in attributes.items()
+        }
+    return value
+
+
+def _neighbor_identity(value: Dict[str, Any]) -> Dict[str, Any]:
+    attrs = _vertex_attributes(value)
+    return {
+        "vertex_type": (
+            value.get("vertex_type")
+            or value.get("v_type")
+            or value.get("type")
+            or attrs.get("vertex_type", "")
+        ),
+        "vertex_id": (
+            value.get("vertex_id")
+            or value.get("v_id")
+            or value.get("id")
+            or attrs.get("vertex_id", "")
+        ),
+        "edge_type": value.get("edge_type") or value.get("edge", ""),
+        "attributes": attrs,
+    }
+
+
 class DetectiveAgent(BaseAgent):
     def __init__(self):
         super().__init__(name="GraphDetectiveAgent")
@@ -33,8 +65,36 @@ class DetectiveAgent(BaseAgent):
         kid = context.card_id
         tid = context.flagged_txn_id
 
-        # 1. Primary transaction: real row from transactions.csv
-        txn_row = STORE.get_flagged_txn(tid) or {}
+        graph_mode = bool(getattr(graph, "is_mcp", False))
+        graph_customer: Dict[str, Any] = {}
+        graph_initiated: List[Dict[str, Any]] = []
+        graph_cases: List[Dict[str, Any]] = []
+        graph_neighbors: List[Dict[str, Any]] = []
+        if graph_mode:
+            graph_customer = _vertex_attributes(graph.get_customer(cid) or {})
+            graph_txn = _vertex_attributes(graph.get_transaction(tid) or {})
+            if not graph_txn:
+                raise RuntimeError(f"TigerGraph MCP returned no Transaction:{tid}")
+            graph_initiated = graph.get_customer_transactions(cid, limit=100)
+            graph_cases = graph.get_customer_cases(cid, limit=100)
+            graph_neighbors = graph.get_transaction_neighbors(tid, limit=100)
+            txn_row = {
+                "TransactionID": graph_txn.get("transaction_id", tid),
+                "TransactionAmt": graph_txn.get("amount", ""),
+                "ts": graph_txn.get("timestamp", ""),
+            }
+            hist = [
+                {
+                    "TransactionID": _vertex_attributes(item).get("transaction_id", ""),
+                    "TransactionAmt": _vertex_attributes(item).get("amount", ""),
+                    "ts": _vertex_attributes(item).get("timestamp", ""),
+                }
+                for item in graph_initiated
+            ]
+        else:
+            # 1. Primary transaction: real row from transactions.csv
+            txn_row = STORE.get_flagged_txn(tid) or {}
+            hist = STORE.get_card_history(cid)
         txn_amount = _f(txn_row.get("TransactionAmt"), 0.0) or _f(
             context.trigger_details.get("amount"), 0.0)
         risk_score = _f(txn_row.get("risk_score"), _f(
@@ -44,14 +104,13 @@ class DetectiveAgent(BaseAgent):
         addr1 = (txn_row.get("addr1") or "").strip()
 
         # 2. Identity record (device, OS, browser, proxy, New/Found) — real row
-        id_row = STORE.get_identity(tid) or {}
+        id_row = {} if graph_mode else (STORE.get_identity(tid) or {})
         device_info = (id_row.get("DeviceInfo") or "").strip()
         proxy_flag = (id_row.get("id_23") or "").strip()
         id_15 = (id_row.get("id_15") or "").strip()
         device_profile = STORE._device_str(id_row) if id_row else ""
 
         # 3. Card history from real transactions.csv rows (spending baseline)
-        hist = STORE.get_card_history(cid)
         prior = [r for r in hist if r.get("TransactionID") != tid]
         n_total = len(prior)
         n_online = sum(1 for r in prior if r.get("channel") == "online")
@@ -72,7 +131,7 @@ class DetectiveAgent(BaseAgent):
         # DeviceInfo values ("Windows", "Trident/7.0", "iOS Device", ...) span
         # hundreds of unrelated customers in identity.csv and are not fingerprints.
         ring_cards: List[Dict[str, str]] = []
-        if device_info and proxy_flag and is_specific_device(device_info):
+        if not graph_mode and device_info and proxy_flag and is_specific_device(device_info):
             ring_cards = STORE.device_neighbors(device_info, proxy_flag, window_days=45)
 
         # --- Out-of-region check on real addr1 history ----------------------
@@ -81,8 +140,121 @@ class DetectiveAgent(BaseAgent):
         evidence_list: List[Dict[str, Any]] = []
         provenance_paths: List[str] = []
 
-        p_base = f"(Customer:{cid})-[:OWNS]->(Card:{kid})-[:MADE]->(Transaction:{tid})"
+        p_base = (
+            f"(Customer:{cid})-[:INITIATED]->(Transaction:{tid})"
+            if graph_mode
+            else f"(Customer:{cid})-[:OWNS]->(Card:{kid})-[:MADE]->(Transaction:{tid})"
+        )
         provenance_paths.append(p_base)
+        if graph_mode:
+            evidence_list.append({
+                "source": "tigergraph_mcp",
+                "signal": "graph_transaction",
+                "value": {
+                    "transaction_id": txn_row.get("TransactionID", tid),
+                    "amount": txn_amount,
+                    "timestamp": txn_row.get("ts", ""),
+                },
+                "weight": 0.0,
+                "path": p_base,
+                "description": "Transaction retrieved from HHGOA_Fraud through TigerGraph MCP.",
+            })
+            if graph_customer:
+                evidence_list.append({
+                    "source": "tigergraph_mcp",
+                    "signal": "graph_customer",
+                    "value": {"customer_id": graph_customer.get("customer_id", cid)},
+                    "weight": 0.0,
+                    "path": f"(Customer:{cid})",
+                    "description": "Customer retrieved from HHGOA_Fraud through TigerGraph MCP.",
+                })
+            for raw_transaction in graph_initiated:
+                transaction = _neighbor_identity(raw_transaction)
+                transaction_id = transaction["vertex_id"]
+                path = f"(Customer:{cid})-[:INITIATED]->(Transaction:{transaction_id})"
+                provenance_paths.append(path)
+                evidence_list.append({
+                    "source": "tigergraph_mcp",
+                    "signal": "graph_relationship",
+                    "value": {
+                        "edge_type": "INITIATED",
+                        "source_type": "Customer",
+                        "source_id": cid,
+                        "target_type": "Transaction",
+                        "target_id": transaction_id,
+                    },
+                    "weight": 0.0,
+                    "path": path,
+                    "description": "Customer transaction relationship retrieved from HHGOA_Fraud.",
+                })
+            if not graph_initiated:
+                evidence_list.append({
+                    "source": "tigergraph_mcp",
+                    "signal": "graph_relationship_absent",
+                    "value": {"edge_type": "INITIATED", "source_id": cid},
+                    "weight": 0.0,
+                    "path": f"(Customer:{cid})",
+                    "description": "No initiated Transaction relationships were returned.",
+                })
+            for raw_neighbor in graph_neighbors:
+                neighbor = _neighbor_identity(raw_neighbor)
+                if neighbor["edge_type"]:
+                    path = (
+                        f"(Transaction:{tid})-[:{neighbor['edge_type']}]->"
+                        f"({neighbor['vertex_type']}:{neighbor['vertex_id']})"
+                    )
+                    provenance_paths.append(path)
+                    evidence_list.append({
+                        "source": "tigergraph_mcp",
+                        "signal": "graph_relationship",
+                        "value": {
+                            "edge_type": neighbor["edge_type"],
+                            "source_type": "Transaction",
+                            "source_id": tid,
+                            "target_type": neighbor["vertex_type"],
+                            "target_id": neighbor["vertex_id"],
+                        },
+                        "weight": 0.0,
+                        "path": path,
+                        "description": "Transaction relationship retrieved from HHGOA_Fraud.",
+                    })
+            if not graph_neighbors:
+                evidence_list.append({
+                    "source": "tigergraph_mcp",
+                    "signal": "graph_relationship_absent",
+                    "value": {"source_type": "Transaction", "source_id": tid},
+                    "weight": 0.0,
+                    "path": f"(Transaction:{tid})",
+                    "description": "No transaction neighborhood relationships were returned.",
+                })
+            for raw_case in graph_cases:
+                case = _neighbor_identity(raw_case)
+                case_id = case["vertex_id"]
+                path = f"(Customer:{cid})-[:INVOLVED_IN]->(FraudCase:{case_id})"
+                provenance_paths.append(path)
+                evidence_list.append({
+                    "source": "tigergraph_mcp",
+                    "signal": "graph_relationship",
+                    "value": {
+                        "edge_type": "INVOLVED_IN",
+                        "source_type": "Customer",
+                        "source_id": cid,
+                        "target_type": "FraudCase",
+                        "target_id": case_id,
+                    },
+                    "weight": 0.0,
+                    "path": path,
+                    "description": "Customer fraud-case relationship retrieved from HHGOA_Fraud.",
+                })
+            if not graph_cases:
+                evidence_list.append({
+                    "source": "tigergraph_mcp",
+                    "signal": "graph_relationship_absent",
+                    "value": {"edge_type": "INVOLVED_IN", "source_id": cid},
+                    "weight": 0.0,
+                    "path": f"(Customer:{cid})",
+                    "description": "No involved FraudCase relationships were returned.",
+                })
         evidence_list.append({
             "source": "transaction_alert",
             "signal": "risk_score_evaluation",

@@ -63,7 +63,7 @@ def _gsql_url() -> str:
 
 
 def _headers(json_body: bool = False) -> dict:
-    token = os.getenv("TG_API_TOKEN", "")
+    token = os.getenv("TG_API_TOKEN") or os.getenv("TG_SECRET", "")
     headers = {"Content-Type": "application/json" if json_body else "text/plain"}
     if token:
         headers["Authorization"] = f"Bearer {token}"

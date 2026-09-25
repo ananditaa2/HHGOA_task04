@@ -15,6 +15,7 @@ venv/
 .env
 .env.*
 !.env.example
+.vscode/mcp.json
 
 # ==============================================================================
 # Large data files ( transactions.csv is ~676 MB — exceeds GitHub's 100 MB

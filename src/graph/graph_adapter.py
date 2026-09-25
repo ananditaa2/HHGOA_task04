@@ -10,10 +10,11 @@ from src.graph.tigergraph_client import TigerGraphClient
 from src.graph.policy_graph import PolicyGraphEngine
 from src.data.real_data import STORE
 from src.rag.vector_store import LightweightVectorStore
+from src.graph.tigergraph_mcp_client import TigerGraphMCPClient
 
 
 class GraphAdapter:
-    def __init__(self, mode: str = GRAPH_BACKEND_MODE):
+    def __init__(self, mode: str = GRAPH_BACKEND_MODE, mcp_client: Any = None):
         self.mode = mode
         self.in_memory = InMemoryGraphEngine()
         self.policy_graph = PolicyGraphEngine()
@@ -21,8 +22,13 @@ class GraphAdapter:
         self.is_live = False
         self.vector_store = LightweightVectorStore()
         self._vectors_loaded = False
+        self.mcp_client = mcp_client
+        self.is_mcp = mode == "mcp"
 
-        if self.mode == "tigergraph":
+        if self.is_mcp:
+            self.mcp_client = self.mcp_client or TigerGraphMCPClient()
+            self.is_live = True
+        elif self.mode == "tigergraph":
             self.is_live = self.tg_client.check_connection()
 
     def get_backend_info(self) -> Dict[str, Any]:
@@ -81,6 +87,8 @@ class GraphAdapter:
 
     def get_transaction(self, txn_id: str) -> Optional[Dict[str, Any]]:
         """Return a transaction from the local graph or live TigerGraph."""
+        if self.is_mcp:
+            return self.mcp_client.get_transaction(str(txn_id))
         local = self.in_memory.get_vertex("Transaction", str(txn_id))
         if local:
             return local
@@ -89,6 +97,30 @@ class GraphAdapter:
             if result:
                 return result
         return None
+
+    def get_customer(self, customer_id: str) -> Optional[Dict[str, Any]]:
+        if self.is_mcp:
+            return self.mcp_client.get_customer(str(customer_id))
+        return self.in_memory.get_vertex("Customer", str(customer_id))
+
+    def get_customer_transactions(self, customer_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+        if self.is_mcp:
+            return self.mcp_client.get_customer_transactions(str(customer_id), limit)
+        return []
+
+    def get_customer_cases(self, customer_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+        if self.is_mcp:
+            return self.mcp_client.get_customer_cases(str(customer_id), limit)
+        return []
+
+    def get_transaction_neighbors(self, txn_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+        if self.is_mcp:
+            return self.mcp_client.get_transaction_neighbors(str(txn_id), limit)
+        return []
+
+    def close(self) -> None:
+        if self.is_mcp and self.mcp_client is not None:
+            self.mcp_client.close()
 
     def evaluate_policy_graph(self, **kwargs) -> Dict[str, Any]:
         return self.policy_graph.evaluate_policy(**kwargs)

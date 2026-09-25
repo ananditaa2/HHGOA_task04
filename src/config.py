@@ -26,9 +26,9 @@ GRAPH_BACKEND_MODE = os.getenv("GRAPH_BACKEND_MODE", "in_memory").lower()
 TG_HOST = os.getenv("TG_HOST", "http://localhost:9000")
 TG_USERNAME = os.getenv("TG_USERNAME", "tigergraph")
 TG_PASSWORD = os.getenv("TG_PASSWORD", "tigergraph")
-TG_GRAPH = os.getenv("TG_GRAPH", "FraudGraph")
+TG_GRAPH = os.getenv("TG_GRAPH") or os.getenv("TG_GRAPHNAME", "FraudGraph")
 TG_SECRET = os.getenv("TG_SECRET", "")
-TG_API_TOKEN = os.getenv("TG_API_TOKEN", "")
+TG_API_TOKEN = os.getenv("TG_API_TOKEN") or TG_SECRET
 
 # Investigation & Risk Policy Constants
 TIME_DECAY_HALF_LIFE_DAYS = 45.0  # Innovation 4: tau = 45 days

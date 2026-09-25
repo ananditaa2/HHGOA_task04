@@ -50,6 +50,8 @@ Case record + SAR + next-best actions
 
 The agent framework is custom Python orchestration using Pydantic state objects. It does not require LangChain, LangGraph, CrewAI, or AutoGen.
 
+The official `tigergraph-mcp` package is supported as a separate MCP server. The app accepts its connection names directly: `TG_HOST`, `TG_SECRET`, and `TG_GRAPHNAME`. Legacy `TG_GRAPH` and `TG_API_TOKEN` names are also supported.
+
 The scored pipeline is deterministic and does not require an LLM. An optional OpenAI-compatible call using `gpt-4o-mini` can polish the analyst narrative only.
 
 ## Quick Start
@@ -97,6 +99,9 @@ GRAPH_BACKEND_MODE=tigergraph
 TG_HOST=https://your-instance.i.tgcloud.io
 TG_GRAPH=FraudGraph
 TG_API_TOKEN=your_database_secret
+# Official MCP aliases may be used instead:
+# TG_GRAPHNAME=FraudGraph
+# TG_SECRET=your_database_secret
 ```
 
 Keep `.env` private. It is ignored by Git.
@@ -114,6 +119,14 @@ python scripts/deploy_tigergraph.py --stream --activate
 ```
 
 The deployment script installs `gsql/schema.gsql`, `gsql/load_job.gsql`, and `gsql/fraud_queries.gsql`. It streams the graph vertices and relationships built from the available local benchmark CSVs. The workspace must be active and the API token must have graph write permissions.
+
+To run the official MCP server for Cursor or another MCP client:
+
+```powershell
+uvx tigergraph-mcp
+```
+
+Configure that MCP server with the same `TG_HOST`, `TG_SECRET`, and `TG_GRAPHNAME` values. Never commit those values.
 
 Verify the connection:
 
