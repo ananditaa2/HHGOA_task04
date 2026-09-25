@@ -7,6 +7,27 @@ from typing import Dict, List, Any, Optional
 from pydantic import BaseModel, Field
 
 
+def mark_graph_signal_unavailable(
+    context: "AgentContext", signal: str, reason: str
+) -> None:
+    unavailable = context.trigger_details.setdefault("unavailable_graph_signals", [])
+    if signal not in unavailable:
+        unavailable.append(signal)
+    if not any(
+        item.get("signal") == "graph_signal_unavailable"
+        and item.get("value", {}).get("signal") == signal
+        for item in context.evidence
+    ):
+        context.evidence.append({
+            "source": "tigergraph_mcp",
+            "signal": "graph_signal_unavailable",
+            "value": {"signal": signal, "reason": reason},
+            "weight": 0.0,
+            "path": f"(HHGOA_Fraud:unavailable:{signal})",
+            "description": f"TigerGraph MCP could not provide {signal}: {reason}",
+        })
+
+
 class AgentContext(BaseModel):
     case_id: str
     opened_at: str

@@ -18,7 +18,8 @@ class PolicyEngineAgent(BaseAgent):
     def determine_initial_phase(self, context: AgentContext, graph: Any) -> AgentContext:
         cid = context.case_id
         trigger = context.trigger_type
-        risk_score = float(context.trigger_details.get("risk_score", 0.5))
+        risk_value = context.trigger_details.get("risk_score")
+        risk_score = float(risk_value) if risk_value is not None else None
         baseline = context.trigger_details.get("baseline", {})
         exposure = context.exposure_usd
         ring = context.trigger_details.get("ring_cards", []) or []
@@ -31,7 +32,11 @@ class PolicyEngineAgent(BaseAgent):
         evidence_requests: List[Dict[str, Any]] = []
 
         # R1: single weak signal (incl. risk score alone) below the 0.70 bar
-        weak_single = risk_score < 0.70 and not (len(ring) >= 3) and pattern != "card_testing"
+        weak_single = (
+            (risk_score is None or risk_score < 0.70)
+            and not (len(ring) >= 3)
+            and pattern != "card_testing"
+        )
 
         if trigger == "analyst_request":
             # Analyst asked for a ring review: open the case and request forensics.
@@ -71,7 +76,11 @@ class PolicyEngineAgent(BaseAgent):
             # risk_score trigger
             if weak_single:
                 initial_actions.append(self._act("VERIFY_WITH_CUSTOMER", "auto",
-                                                 f"R1: single weak signal (risk {risk_score:.2f} < 0.70); verify before any adverse action."))
+                                                 (
+                                                     f"R1: transaction risk score unavailable; verify before any adverse action."
+                                                     if risk_score is None
+                                                     else f"R1: single weak signal (risk {risk_score:.2f} < 0.70); verify before any adverse action."
+                                                 )))
                 evidence_requests.append({
                     "request_id": f"REQ-{cid}-01",
                     "request_type": "customer_verification",

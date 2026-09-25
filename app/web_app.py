@@ -49,7 +49,8 @@ app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
 
 # Global System Engine (graph built purely from the four provided CSV files)
 adapter = GraphAdapter()
-build_graph_from_real_data(adapter.in_memory)
+if not adapter.is_mcp:
+    build_graph_from_real_data(adapter.in_memory)
 coordinator = InvestigationCoordinator(graph_adapter=adapter)
 
 

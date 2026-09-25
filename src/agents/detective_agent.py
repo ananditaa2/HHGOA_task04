@@ -7,7 +7,7 @@ device ring from the actual shared (DeviceInfo + proxy) population.
 """
 
 from typing import Dict, List, Any, Optional
-from src.agents.base_agent import BaseAgent, AgentContext
+from src.agents.base_agent import BaseAgent, AgentContext, mark_graph_signal_unavailable
 from src.data.real_data import STORE, card_ids_for, is_specific_device
 
 
@@ -70,6 +70,7 @@ class DetectiveAgent(BaseAgent):
         graph_initiated: List[Dict[str, Any]] = []
         graph_cases: List[Dict[str, Any]] = []
         graph_neighbors: List[Dict[str, Any]] = []
+        unavailable_signals: List[tuple[str, str]] = []
         if graph_mode:
             graph_customer = _vertex_attributes(graph.get_customer(cid) or {})
             graph_txn = _vertex_attributes(graph.get_transaction(tid) or {})
@@ -91,16 +92,26 @@ class DetectiveAgent(BaseAgent):
                 }
                 for item in graph_initiated
             ]
+            context.trigger_details["graph_transaction_history"] = [
+                {
+                    "transaction_id": _neighbor_identity(item)["vertex_id"],
+                    "amount": _vertex_attributes(item).get("amount"),
+                }
+                for item in graph_initiated
+            ]
         else:
             # 1. Primary transaction: real row from transactions.csv
             txn_row = STORE.get_flagged_txn(tid) or {}
             hist = STORE.get_card_history(cid)
-        txn_amount = _f(txn_row.get("TransactionAmt"), 0.0) or _f(
-            context.trigger_details.get("amount"), 0.0)
-        risk_score = _f(txn_row.get("risk_score"), _f(
-            context.trigger_details.get("risk_score"), 0.5))
+        txn_amount = _f(txn_row.get("TransactionAmt"), 0.0)
+        if not graph_mode:
+            txn_amount = txn_amount or _f(context.trigger_details.get("amount"), 0.0)
+        risk_value = txn_row.get("risk_score")
+        if risk_value is None and not graph_mode:
+            risk_value = context.trigger_details.get("risk_score", 0.5)
+        risk_score = _f(risk_value, 0.0) if risk_value is not None else None
         product = txn_row.get("ProductCD", "")
-        channel = txn_row.get("channel", "online" if product != "W" else "in_person")
+        channel = txn_row.get("channel", ("unknown" if graph_mode else "online" if product != "W" else "in_person"))
         addr1 = (txn_row.get("addr1") or "").strip()
 
         # 2. Identity record (device, OS, browser, proxy, New/Found) — real row
@@ -255,19 +266,35 @@ class DetectiveAgent(BaseAgent):
                     "path": f"(Customer:{cid})",
                     "description": "No involved FraudCase relationships were returned.",
                 })
-        evidence_list.append({
-            "source": "transaction_alert",
-            "signal": "risk_score_evaluation",
-            "value": risk_score,
-            "weight": 0.85 if risk_score >= 0.70 else 0.40,
-            "path": p_base,
-            "description": (f"Flagged transaction {tid}: ${txn_amount:,.2f}, ProductCD={product}, "
-                            f"channel={channel}, billing region addr1={addr1 or 'n/a'}, "
-                            f"bank risk score {risk_score:.2f} (real transactions.csv row).")
-        })
+        if risk_score is not None:
+            evidence_list.append({
+                "source": "transaction_alert" if not graph_mode else "tigergraph_mcp",
+                "signal": "risk_score_evaluation",
+                "value": risk_score,
+                "weight": 0.85 if risk_score >= 0.70 else 0.40,
+                "path": p_base,
+                "description": (
+                    f"Flagged transaction {tid}: bank risk score {risk_score:.2f}."
+                    if graph_mode else
+                    f"Flagged transaction {tid}: ${txn_amount:,.2f}, ProductCD={product}, "
+                    f"channel={channel}, billing region addr1={addr1 or 'n/a'}, "
+                    f"bank risk score {risk_score:.2f} (real transactions.csv row)."
+                ),
+            })
+        elif graph_mode:
+            for signal, reason in (
+                ("transaction_amount", "The deployed graph does not store a transaction amount."),
+                ("transaction_timestamp", "The deployed graph does not store a transaction timestamp."),
+                ("transaction_risk_score", "The deployed graph does not store a transaction risk score."),
+                ("transaction_identity_attributes", "The deployed graph does not store device, channel, or billing-region attributes."),
+                ("customer_transaction_history_metrics", "Neighbor vertices expose IDs only, not amounts, timestamps, or channel attributes."),
+                ("card_testing", "Card-testing detection requires transaction amounts and timestamps."),
+                ("out_of_region", "Out-of-region analysis requires billing-region and transaction-history attributes."),
+            ):
+                unavailable_signals.append((signal, reason))
 
         # Baseline evidence from the cardholder's real history
-        if n_total > 0:
+        if n_total > 0 and not graph_mode:
             ev_hist = {
                 "source": "card_history",
                 "signal": "historical_baseline",
@@ -382,6 +409,8 @@ class DetectiveAgent(BaseAgent):
             primary_pattern = "undocumented"
         elif id_15.lower() == "new" and channel == "online":
             primary_pattern = "card_not_present_new_device"
+        elif graph_mode:
+            primary_pattern = "undocumented"
         elif channel == "online":
             primary_pattern = "card_not_present_fraud"
         elif region_stats["is_out_of_region"]:
@@ -394,6 +423,8 @@ class DetectiveAgent(BaseAgent):
         context.primary_pattern = primary_pattern
         context.evidence = evidence_list
         context.provenance_paths = provenance_paths
+        for signal, reason in unavailable_signals:
+            mark_graph_signal_unavailable(context, signal, reason)
 
         # Expose ring data for downstream agents
         context.trigger_details = dict(context.trigger_details)

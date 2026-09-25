@@ -8,7 +8,7 @@ simulated here and the assumption is recorded in the case's evidence_requests.
 """
 
 from typing import Dict, List, Any, Optional, Tuple
-from src.agents.base_agent import BaseAgent, AgentContext
+from src.agents.base_agent import BaseAgent, AgentContext, mark_graph_signal_unavailable
 from src.data.real_data import STORE
 
 
@@ -22,6 +22,8 @@ class EvidenceSimulatorAgent(BaseAgent):
         id_15 = str(context.trigger_details.get("id_15", "")).lower()
         proxy_flag = str(context.trigger_details.get("proxy_flag", ""))
         ring = context.trigger_details.get("ring_cards", []) or []
+        if getattr(graph, "is_mcp", False):
+            return self._run_mcp(context, ring, proxy_flag)
         amount = self._flagged_amount(context)
         recurring, recurring_count = self._recurring_stats(context)
 
@@ -80,6 +82,55 @@ class EvidenceSimulatorAgent(BaseAgent):
                 "verification_timestamp": context.opened_at,
             })
 
+        context.simulated_responses = responses
+        return context
+
+    @staticmethod
+    def _run_mcp(
+        context: AgentContext,
+        ring: List[Dict[str, str]],
+        proxy_flag: str,
+    ) -> AgentContext:
+        mark_graph_signal_unavailable(
+            context,
+            "customer_amount_history",
+            "The deployed graph contains no transaction amounts or prior amount history.",
+        )
+        responses: List[Dict[str, Any]] = []
+        reported_dispute = (
+            context.trigger_type == "customer_report"
+            or "never made" in str(context.trigger_details.get("trigger_text", "")).lower()
+        )
+        for request in context.evidence_requests:
+            request_type = request.get("request_type", "")
+            if request_type == "customer_verification" and reported_dispute:
+                responses.append({
+                    "request_id": request.get("request_id"),
+                    "responder": "case_record",
+                    "response_type": "recorded_customer_report",
+                    "status": "denied_transaction",
+                    "message": "The existing case record states that the customer disputes this transaction; no customer was contacted.",
+                    "verification_timestamp": context.opened_at,
+                })
+            else:
+                unavailable_signal = (
+                    "device_forensics"
+                    if request_type == "device_forensics"
+                    else "customer_verification"
+                )
+                mark_graph_signal_unavailable(
+                    context,
+                    unavailable_signal,
+                    "No live analyst or customer action was performed; the graph has no supporting profile attributes.",
+                )
+                responses.append({
+                    "request_id": request.get("request_id"),
+                    "responder": "system",
+                    "response_type": "evidence_unavailable",
+                    "status": "not_obtained",
+                    "message": "No external customer or analyst action was performed; required graph evidence is unavailable.",
+                    "verification_timestamp": context.opened_at,
+                })
         context.simulated_responses = responses
         return context
 

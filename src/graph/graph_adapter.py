@@ -40,6 +40,11 @@ class GraphAdapter:
 
     # Proxy query calls
     def query_card_testing(self, card_id: str, window_hours: int = 48) -> Dict[str, Any]:
+        if self.is_mcp:
+            return self._mcp_signal_unavailable(
+                "card_testing",
+                "The deployed graph does not expose transaction amount and timestamp attributes.",
+            )
         if self.is_live:
             res = self.tg_client.run_gsql_query("query_card_testing", {"card_id": card_id, "window_hours": window_hours})
             if "error" not in res:
@@ -47,6 +52,11 @@ class GraphAdapter:
         return self.in_memory.query_card_testing(card_id, window_hours)
 
     def query_device_ring_centrality(self, device_id: str, window_days: int = 60) -> Dict[str, Any]:
+        if self.is_mcp:
+            return self._mcp_signal_unavailable(
+                "device_ring",
+                "The deployed graph does not expose device-profile vertices or attributes.",
+            )
         if self.is_live:
             res = self.tg_client.run_gsql_query("query_device_ring_centrality", {"device_id": device_id, "window_days": window_days})
             if "error" not in res:
@@ -54,6 +64,11 @@ class GraphAdapter:
         return self.in_memory.query_device_ring_centrality(device_id, window_days)
 
     def query_out_of_region(self, customer_id: str, txn_id: str) -> Dict[str, Any]:
+        if self.is_mcp:
+            return self._mcp_signal_unavailable(
+                "out_of_region",
+                "The deployed graph does not expose billing-region or transaction-history attributes.",
+            )
         if self.is_live:
             res = self.tg_client.run_gsql_query("query_out_of_region", {"customer_id": customer_id, "txn_id": txn_id})
             if "error" not in res:
@@ -61,6 +76,8 @@ class GraphAdapter:
         return self.in_memory.query_out_of_region(customer_id, txn_id)
 
     def query_similar_closed_cases(self, pattern: str, alert_date_str: str, limit: int = 3) -> List[Dict[str, Any]]:
+        if self.is_mcp:
+            return []
         self._load_vectors()
         query = f"pattern {pattern} alert_date {alert_date_str}"
         results = self.vector_store.search(query, limit)
@@ -118,6 +135,15 @@ class GraphAdapter:
             return self.mcp_client.get_transaction_neighbors(str(txn_id), limit)
         return []
 
+    @staticmethod
+    def _mcp_signal_unavailable(signal: str, reason: str) -> Dict[str, Any]:
+        return {
+            "available": False,
+            "source": "tigergraph_mcp",
+            "signal": signal,
+            "reason": reason,
+        }
+
     def close(self) -> None:
         if self.is_mcp and self.mcp_client is not None:
             self.mcp_client.close()
@@ -127,7 +153,7 @@ class GraphAdapter:
 
     def commit_case_memory(self, case_id: str, case_data: Dict[str, Any]) -> bool:
         committed = self.in_memory.commit_case_memory(case_id, case_data)
-        if self.is_live:
+        if self.is_live and not self.is_mcp:
             self.tg_client.upsert_vertex("InvestigationCase", case_id, {
                 "case_id": case_id,
                 "status": case_data.get("status", "closed"),

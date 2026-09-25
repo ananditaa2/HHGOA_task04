@@ -5,7 +5,7 @@ precisely which signals disagree with each other.
 """
 
 from typing import Dict, List, Any, Tuple
-from src.agents.base_agent import BaseAgent, AgentContext
+from src.agents.base_agent import BaseAgent, AgentContext, mark_graph_signal_unavailable
 from src.config import EVIDENCE_CONFLICT_THRESHOLD
 
 
@@ -50,7 +50,13 @@ class ConflictEvaluatorAgent(BaseAgent):
         cid = context.customer_id
         tid = context.flagged_txn_id
         region_res = graph.query_out_of_region(cid, tid)
-        if region_res.get("home_region_txns", 0) > 10 and not region_res.get("is_out_of_region", False):
+        if graph.is_mcp and not region_res.get("available", True):
+            mark_graph_signal_unavailable(
+                context,
+                "out_of_region",
+                region_res.get("reason", "Required graph attributes are unavailable."),
+            )
+        elif region_res.get("home_region_txns", 0) > 10 and not region_res.get("is_out_of_region", False):
             signals.append({
                 "signal": "historical_merchant_loyalty",
                 "value": f"{region_res.get('home_region_txns')} past txns",
@@ -95,6 +101,11 @@ class ConflictEvaluatorAgent(BaseAgent):
             uncertainty = "medium"
         else:
             uncertainty = "low"
+        if graph.is_mcp and context.trigger_details.get("unavailable_graph_signals"):
+            uncertainty = "high"
+            context.trigger_details["uncertainty_basis"] = (
+                "Critical transaction profile attributes are unavailable from the deployed TigerGraph schema."
+            )
 
         context.conflict_score = final_c
         context.conflicting_signals = conflicting_pairs

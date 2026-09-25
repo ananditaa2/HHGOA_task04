@@ -8,7 +8,7 @@ the exact answer format from README (2).md:
 import time
 from typing import Dict, List, Any, Optional
 
-from src.agents.base_agent import AgentContext
+from src.agents.base_agent import AgentContext, mark_graph_signal_unavailable
 from src.agents.detective_agent import DetectiveAgent
 from src.agents.conflict_evaluator import ConflictEvaluatorAgent
 from src.agents.critic_agent import CriticAgent
@@ -47,17 +47,21 @@ class InvestigationCoordinator:
         # ---- Intake from the real case_pack.csv row --------------------
         fid = str(case_input.get("flagged_txn_id", ""))
         cid = case_input.get("customer_id", "")
-        txn_row = STORE.get_flagged_txn(fid) or {}
+        graph_mode = bool(getattr(self.graph, "is_mcp", False))
+        txn_row = {} if graph_mode else (STORE.get_flagged_txn(fid) or {})
         card1 = txn_row.get("card1", "")
         mapped = card_ids_for(cid, card1) if card1 else []
         kid = case_input.get("card_id", "") or (mapped[0] if mapped else f"{cid}-K1")
 
+        risk_value = case_input.get("risk_score")
+        if risk_value in (None, "") and not graph_mode:
+            risk_value = txn_row.get("risk_score", 0.5)
         context = AgentContext(
             case_id=case_input.get("case_id", ""),
             opened_at=case_input.get("opened_at", ""),
             trigger_type=case_input.get("trigger_type", "risk_score"),
             trigger_details={
-                "risk_score": case_input.get("risk_score") or _f(txn_row.get("risk_score"), 0.5),
+                "risk_score": _f(risk_value) if risk_value not in (None, "") else None,
                 "trigger_text": case_input.get("trigger_text", ""),
             },
             customer_id=cid,
@@ -69,6 +73,12 @@ class InvestigationCoordinator:
         # ---- Stage pipeline (all agents read real CSV-derived signals) --
         context = self.detective.run(context, self.graph)
         self.tool_calls += 4  # flagged txn, identity row, card history, pattern scans
+        if graph_mode:
+            mark_graph_signal_unavailable(
+                context,
+                "similar_closed_cases",
+                "Closed-case history is not stored in the deployed TigerGraph graph.",
+            )
 
         context = self.conflict_evaluator.run(context, self.graph)
         context = self.critic.run(context, self.graph)
@@ -78,8 +88,11 @@ class InvestigationCoordinator:
         self.tool_calls += 4  # policy evaluation, simulation, precedent retrieval, case memory
 
         # ---- Precedent retrieval from real closed_cases_history.csv -----
-        precedents = self._similar_prior_cases(context.primary_pattern,
-                                               context.opened_at, limit=3)
+        precedents = (
+            []
+            if graph_mode
+            else self._similar_prior_cases(context.primary_pattern, context.opened_at, limit=3)
+        )
         self.tool_calls += 1
 
         # ---- Write case memory into the graph ---------------------------
@@ -177,7 +190,11 @@ class InvestigationCoordinator:
                 entity_ids = entity_ids + connected_cards[:5]
             evidence_out.append({
                 "claim": ev.get("description", ""),
-                "source": "graph",
+                "source": (
+                    "tigergraph_mcp"
+                    if self.graph.is_mcp and ev.get("source") == "tigergraph_mcp"
+                    else "graph"
+                ),
                 "ref": f"query:{ref}",
                 "entity_ids": entity_ids,
             })
@@ -246,7 +263,7 @@ class InvestigationCoordinator:
                 "narrative": sar_in.get("narrative", ""),
                 "subjects": self._sar_subjects(context, ring),
                 "total_amount_usd": exposure,
-                "activity_dates": self._activity_dates(affected),
+                "activity_dates": [] if self.graph.is_mcp else self._activity_dates(affected),
             }
         else:
             sar = {"file": False, "reason": sar_in.get("reason") or
@@ -303,7 +320,7 @@ class InvestigationCoordinator:
                 "evidence": evidence_out,
                 "similar_prior_cases": [p["case_id"] for p in precedents],
                 "summary": summary.strip(),
-                "written_to_graph": True,
+                "written_to_graph": not self.graph.is_mcp,
                 "graph_case_id": graph_case_id,
             },
             "evidence_requests": ev_requests,
@@ -321,6 +338,8 @@ class InvestigationCoordinator:
 
     # ------------------------------------------------------------------
     def _txn_amount(self, txn_id: str) -> float:
+        if self.graph.is_mcp:
+            return 0.0
         row = STORE.get_flagged_txn(txn_id)
         if row:
             return _f(row.get("TransactionAmt"))
