@@ -28,9 +28,14 @@ class CriticAgent(BaseAgent):
 
         tid = context.flagged_txn_id
         graph_mode = bool(getattr(graph, "is_mcp", False))
-        txn = graph.get_transaction(tid) or {} if graph_mode else (
-            graph.in_memory.get_vertex("Transaction", tid) or {}
-        )
+        if graph_mode:
+            txn = (
+                context.trigger_details.get("mcp_transaction")
+                or graph.get_transaction(tid)
+                or {}
+            )
+        else:
+            txn = graph.in_memory.get_vertex("Transaction", tid) or {}
         amount_value = txn.get("amount") if graph_mode else txn.get("amount", context.exposure_usd)
         amount = _f(amount_value, 0.0)
         baseline = context.trigger_details.get("baseline", {})

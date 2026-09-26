@@ -25,7 +25,9 @@ class PolicyEngineAgent(BaseAgent):
         ring = context.trigger_details.get("ring_cards", []) or []
         id_15 = str(context.trigger_details.get("id_15", "")).lower()
         proxy_flag = str(context.trigger_details.get("proxy_flag", ""))
-        channel = str(baseline.get("channel", "online"))
+        channel = str(
+            context.trigger_details.get("channel", baseline.get("channel", "online"))
+        )
         pattern = context.primary_pattern
 
         initial_actions: List[Dict[str, Any]] = []

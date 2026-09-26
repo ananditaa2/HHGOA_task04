@@ -79,16 +79,50 @@ class DetectiveAgent(BaseAgent):
             graph_initiated = graph.get_customer_transactions(cid, limit=100)
             graph_cases = graph.get_customer_cases(cid, limit=100)
             graph_neighbors = graph.get_transaction_neighbors(tid, limit=100)
+            def first_present(*names: str) -> Any:
+                for name in names:
+                    value = graph_txn.get(name)
+                    if value is not None and value != "":
+                        return value
+                return None
+
+            mcp_transaction = {
+                "transaction_id": first_present("transaction_id") or tid,
+                "amount": first_present("amount", "TransactionAmt"),
+                "timestamp": first_present("timestamp", "ts"),
+                "risk_score": first_present("risk_score"),
+                "channel": first_present("channel"),
+                "ProductCD": first_present("ProductCD", "product_cd"),
+                "device_type": first_present("device_type", "DeviceType"),
+                "device_info": first_present("device_info", "DeviceInfo"),
+                "id_15": first_present("id_15"),
+                "id_28": first_present("id_28"),
+                "id_31": first_present("id_31"),
+            }
+            mcp_transaction = {
+                key: value for key, value in mcp_transaction.items()
+                if value is not None and value != ""
+            }
+            context.trigger_details["mcp_transaction"] = mcp_transaction
+            for key in ("amount", "timestamp", "risk_score", "channel", "ProductCD"):
+                if key in mcp_transaction:
+                    context.trigger_details[key] = mcp_transaction[key]
             txn_row = {
-                "TransactionID": graph_txn.get("transaction_id", tid),
-                "TransactionAmt": graph_txn.get("amount", ""),
-                "ts": graph_txn.get("timestamp", ""),
+                "TransactionID": mcp_transaction.get("transaction_id", tid),
+                "TransactionAmt": mcp_transaction.get("amount"),
+                "ts": mcp_transaction.get("timestamp"),
+                "risk_score": mcp_transaction.get("risk_score"),
+                "channel": mcp_transaction.get("channel"),
+                "ProductCD": mcp_transaction.get("ProductCD"),
             }
             hist = [
                 {
                     "TransactionID": _vertex_attributes(item).get("transaction_id", ""),
                     "TransactionAmt": _vertex_attributes(item).get("amount", ""),
-                    "ts": _vertex_attributes(item).get("timestamp", ""),
+                    "ts": _vertex_attributes(item).get(
+                        "timestamp", _vertex_attributes(item).get("ts", "")
+                    ),
+                    "channel": _vertex_attributes(item).get("channel", ""),
                 }
                 for item in graph_initiated
             ]
@@ -111,7 +145,9 @@ class DetectiveAgent(BaseAgent):
             risk_value = context.trigger_details.get("risk_score", 0.5)
         risk_score = _f(risk_value, 0.0) if risk_value is not None else None
         product = txn_row.get("ProductCD", "")
-        channel = txn_row.get("channel", ("unknown" if graph_mode else "online" if product != "W" else "in_person"))
+        channel = txn_row.get("channel") or (
+            "unknown" if graph_mode else "online" if product != "W" else "in_person"
+        )
         addr1 = (txn_row.get("addr1") or "").strip()
 
         # 2. Identity record (device, OS, browser, proxy, New/Found) — real row
@@ -161,14 +197,12 @@ class DetectiveAgent(BaseAgent):
             evidence_list.append({
                 "source": "tigergraph_mcp",
                 "signal": "graph_transaction",
-                "value": {
-                    "transaction_id": txn_row.get("TransactionID", tid),
-                    "amount": txn_amount,
-                    "timestamp": txn_row.get("ts", ""),
-                },
+                "value": dict(context.trigger_details.get("mcp_transaction", {})),
                 "weight": 0.0,
                 "path": p_base,
-                "description": "Transaction retrieved from HHGOA_Fraud through TigerGraph MCP.",
+                "description": self._mcp_transaction_description(
+                    context.trigger_details.get("mcp_transaction", {})
+                ),
             })
             if graph_customer:
                 evidence_list.append({
@@ -281,17 +315,43 @@ class DetectiveAgent(BaseAgent):
                     f"bank risk score {risk_score:.2f} (real transactions.csv row)."
                 ),
             })
-        elif graph_mode:
-            for signal, reason in (
-                ("transaction_amount", "The deployed graph does not store a transaction amount."),
-                ("transaction_timestamp", "The deployed graph does not store a transaction timestamp."),
-                ("transaction_risk_score", "The deployed graph does not store a transaction risk score."),
-                ("transaction_identity_attributes", "The deployed graph does not store device, channel, or billing-region attributes."),
-                ("customer_transaction_history_metrics", "Neighbor vertices expose IDs only, not amounts, timestamps, or channel attributes."),
-                ("card_testing", "Card-testing detection requires transaction amounts and timestamps."),
-                ("out_of_region", "Out-of-region analysis requires billing-region and transaction-history attributes."),
+        if graph_mode:
+            mcp_transaction = context.trigger_details.get("mcp_transaction", {})
+            for field, signal, label in (
+                ("amount", "transaction_amount", "transaction amount"),
+                ("timestamp", "transaction_timestamp", "transaction timestamp"),
+                ("risk_score", "transaction_risk_score", "transaction risk score"),
+                ("channel", "transaction_channel", "transaction channel"),
+                ("ProductCD", "transaction_product_code", "ProductCD"),
             ):
-                unavailable_signals.append((signal, reason))
+                if field not in mcp_transaction:
+                    unavailable_signals.append((
+                        signal, f"TigerGraph MCP returned no {label} attribute."
+                    ))
+            identity_fields = ("device_type", "device_info", "id_15", "id_28", "id_31")
+            identity_available = any(field in mcp_transaction for field in identity_fields)
+            if not identity_available and not (
+                "channel" in mcp_transaction and "ProductCD" in mcp_transaction
+            ):
+                unavailable_signals.append((
+                    "transaction_identity_attributes",
+                    "TigerGraph MCP returned no device, channel, or product attributes.",
+                ))
+
+            prior_graph_rows = [row for row in hist if row.get("TransactionID") != tid]
+            history_complete = bool(prior_graph_rows) and all(
+                row.get("TransactionAmt") not in (None, "")
+                and row.get("ts") not in (None, "")
+                and row.get("channel") not in (None, "")
+                for row in prior_graph_rows
+            )
+            if not history_complete:
+                unavailable_signals.extend((
+                    ("customer_transaction_history_metrics",
+                     "Neighbor vertices do not expose complete transaction amounts, timestamps, and channels."),
+                    ("card_testing",
+                     "Card-testing detection requires amounts and timestamps across transaction history."),
+                ))
 
         # Baseline evidence from the cardholder's real history
         if n_total > 0 and not graph_mode:
@@ -445,6 +505,22 @@ class DetectiveAgent(BaseAgent):
         context.trigger_details["region_stats"] = region_stats
         context.trigger_details["testing_scan"] = testing
         return context
+
+    @staticmethod
+    def _mcp_transaction_description(transaction: Dict[str, Any]) -> str:
+        labels = (
+            ("amount", "amount"),
+            ("timestamp", "timestamp"),
+            ("risk_score", "risk_score"),
+            ("channel", "channel"),
+            ("ProductCD", "ProductCD"),
+        )
+        fields = [f"{label}={transaction[key]}" for key, label in labels if key in transaction]
+        values = "; ".join(fields)
+        return (
+            "Transaction retrieved from HHGOA_Fraud through TigerGraph MCP"
+            + (f" ({values})." if values else ".")
+        )
 
     # ------------------------------------------------------------------
     @staticmethod

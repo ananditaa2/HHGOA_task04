@@ -103,9 +103,30 @@ class ConflictEvaluatorAgent(BaseAgent):
             uncertainty = "low"
         if graph.is_mcp and context.trigger_details.get("unavailable_graph_signals"):
             uncertainty = "high"
-            context.trigger_details["uncertainty_basis"] = (
-                "Critical transaction profile attributes are unavailable from the deployed TigerGraph schema."
-            )
+            unavailable = context.trigger_details["unavailable_graph_signals"]
+            profile_signals = {
+                "transaction_amount",
+                "transaction_timestamp",
+                "transaction_risk_score",
+                "transaction_channel",
+                "transaction_product_code",
+                "transaction_identity_attributes",
+            }
+            missing_profile = sorted(profile_signals.intersection(unavailable))
+            if missing_profile:
+                context.trigger_details["uncertainty_basis"] = (
+                    "Required transaction profile fields were unavailable from TigerGraph MCP: "
+                    + ", ".join(missing_profile)
+                    + "."
+                )
+            else:
+                remaining = sorted(set(unavailable) - profile_signals)
+                context.trigger_details["uncertainty_basis"] = (
+                    "The transaction profile was retrieved from TigerGraph MCP; "
+                    "graph history signals remain unavailable: "
+                    + ", ".join(remaining)
+                    + "."
+                )
 
         context.conflict_score = final_c
         context.conflicting_signals = conflicting_pairs

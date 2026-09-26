@@ -64,6 +64,7 @@
       </div>
     </div>
     <div class="brand-right">
+      <button class="action-exec-btn" onclick="openSandboxModal()">RUN INVESTIGATION</button>
       <button class="filter-btn" onclick="openSandboxModal()">&#129514; SANDBOX</button>
       <button class="filter-btn" onclick="runQAAuditModal()">&#128737;&#65039; QA AUDIT</button>
       <button class="filter-btn" onclick="openPolicyModal()">&#128220; RULES R1-R10</button>
@@ -139,13 +140,7 @@
       <div class="panel-card">
         <div class="panel-header">
           <div class="panel-title">&#128376;&#65039; MULTI-HOP GRAPH NEIGHBORHOOD</div>
-          <div style="font-size: 10px; color: #FEE101; display:flex; gap:8px; flex-wrap:wrap;">
-            <span><b style="color:#FFFBE8;">&#9679;</b> Customer</span>
-            <span><b style="color:#FEE101;">&#9679;</b> Card</span>
-            <span><b style="color:#FF0080;">&#9679;</b> Flagged Txn</span>
-            <span><b style="color:#00E5FF;">&#9679;</b> Device</span>
-            <span><b style="color:#A7FF83;">&#9679;</b> Region</span>
-          </div>
+          <div id="graph-legend" style="font-size: 10px; color: #FEE101; display:flex; gap:8px; flex-wrap:wrap;"></div>
         </div>
 
         <div class="graph-container-relative">
@@ -155,12 +150,12 @@
             <button class="graph-ctrl-btn" onclick="fitGraph()" title="Fit View">FIT</button>
             <button class="graph-ctrl-btn" onclick="toggleGraphPhysics()" id="btn-physics-toggle" title="Toggle Physics">FREEZE</button>
           </div>
-          <div id="graph-canvas"></div>
+          <div id="graph-canvas" style="display:flex; align-items:center; justify-content:center; color:rgba(255,251,232,0.72); text-align:center; padding:18px;">Run an investigation to display graph data returned by the API. No graph entities are preloaded.</div>
         </div>
 
         <div class="provenance-path-box" id="provenance-path-display">
           <span style="color: #FEE101; font-weight: bold;">LITERAL GRAPH PATH (INNOVATION 6):</span>
-          <span id="provenance-path-text">Loading graph path...</span>
+          <span id="provenance-path-text">Provenance will appear after an API investigation.</span>
         </div>
 
         <!-- Node Inspector -->
@@ -174,13 +169,13 @@
       <div class="panel-card">
         <div class="panel-header">
           <div class="panel-title">EVIDENCE CONFLICT &amp; UNCERTAINTY</div>
-          <div id="uncertainty-pill" class="badge-goa" style="font-size: 10px; padding: 2px 8px;">UNCERTAINTY: LOW</div>
+          <div id="uncertainty-pill" class="badge-goa" style="font-size: 10px; padding: 2px 8px;">UNCERTAINTY: —</div>
         </div>
 
         <div class="conflict-meter-container">
           <div style="display: flex; justify-content: space-between; font-size: 11px;">
             <span>Quantitative Conflict Score (C)</span>
-            <span id="conflict-score-val" style="color: #FEE101; font-weight: bold;">0.000 / 1.000</span>
+            <span id="conflict-score-val" style="color: #FEE101; font-weight: bold;">—</span>
           </div>
           <div class="meter-bar-track">
             <div id="conflict-meter-fill" class="meter-bar-fill"></div>
@@ -198,13 +193,15 @@
             <!-- Injected by JavaScript -->
           </div>
         </div>
+        <div id="uncertainty-basis-display" style="margin-top: 8px; font-size: 10px; color: rgba(255,251,232,0.78);"></div>
 
         <!-- Devil's Advocate Adversarial Critique (Innovation 5) -->
         <div style="margin-top: 14px; background: rgba(7,68,36,0.4); border: 1px solid rgba(254,225,1,0.25); border-radius: 6px; padding: 10px;">
           <div style="font-size: 10px; color: #FEE101; font-weight: bold; display: flex; justify-content: space-between; text-transform: uppercase; letter-spacing: 0.5px;">
             <span>DEVIL'S ADVOCATE CHALLENGE (INNOVATION 5)</span>
-            <span id="innocent-score-badge" style="color: #00FFA3;">Innocent P: 0.00</span>
+            <span id="innocent-score-badge" style="color: #00FFA3;">Innocent score: —</span>
           </div>
+          <div id="devils-advocate-verdict" style="font-size: 11px; color: #00E5FF; font-weight: bold; margin-top: 7px;">Critic result will appear after investigation.</div>
           <div id="devils-advocate-hypo" style="font-size: 11px; color: #FFFBE8; margin-top: 6px; line-height: 1.5; font-style: italic;">
             Evaluating innocent explanations...
           </div>
@@ -230,26 +227,44 @@
       <div class="active-case-banner">
         <div>
           <div style="display: flex; align-items: center; gap: 10px;">
-            <span class="case-hero-id" id="active-case-id">HHG-001</span>
-            <span id="active-verdict-badge" class="badge-goa">LEGITIMATE</span>
+            <span class="case-hero-id" id="active-case-id">AWAITING INVESTIGATION</span>
+            <span id="active-verdict-badge" class="badge-goa">READY</span>
             <span id="active-sar-badge" class="route-badge route-l2" style="display:none;">SAR REQUIRED (L2)</span>
           </div>
           <div style="font-size: 11px; color: #FFFBE8; margin-top: 5px;">
-            PATTERN: <span id="active-pattern" style="color: #FEE101; font-weight: bold;">ANOMALY</span> |
-            EXPOSURE: <span id="active-exposure" style="color: #00FFA3; font-weight: bold;">$0.00 USD</span> |
-            FRAUD PROB: <span id="active-prob" style="color: #FF0080; font-weight: bold;">0.0%</span>
+            PATTERN: <span id="active-pattern" style="color: #FEE101; font-weight: bold;">—</span> |
+            EXPOSURE: <span id="active-exposure" style="color: #00FFA3; font-weight: bold;">—</span> |
+            FRAUD PROB: <span id="active-prob" style="color: #FF0080; font-weight: bold;">—</span>
           </div>
         </div>
         <div style="text-align: right;">
-          <div style="font-size: 10px; color: #FEE101;">OPENED: <span id="active-opened">2016-12-05</span></div>
-          <div style="font-size: 9px; color: #00FFA3; margin-top: 2px;"><span class="live-dot"></span> CASE MEMORY: COMMITTED</div>
+          <div style="font-size: 10px; color: #FEE101;">OPENED: <span id="active-opened">—</span></div>
+          <div id="case-memory-status" style="font-size: 9px; color: #00E5FF; margin-top: 2px;">CASE MEMORY: —</div>
+        </div>
+      </div>
+
+      <div class="panel-card" id="live-transaction-panel" style="display:none; margin-top:14px;">
+        <div class="panel-header">
+          <div class="panel-title">LIVE TRANSACTION PROFILE</div>
+          <span id="evidence-source-label" class="badge-goa" style="font-size:10px;">Evidence Source: —</span>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); gap:9px; font-size:11px; color:#FFFBE8;">
+          <div>Customer ID<br><b id="live-customer-id" class="live-fact">—</b></div>
+          <div>Transaction ID<br><b id="live-transaction-id" class="live-fact">—</b></div>
+          <div>Amount<br><b id="live-amount" class="live-fact">—</b></div>
+          <div>Timestamp<br><b id="live-timestamp" class="live-fact">—</b></div>
+          <div>Risk score<br><b id="live-risk-score" class="live-fact">—</b></div>
+          <div>Channel<br><b id="live-channel" class="live-fact">—</b></div>
+          <div>ProductCD<br><b id="live-product-cd" class="live-fact">—</b></div>
+          <div>Evidence count<br><b id="live-evidence-count" class="live-fact">—</b></div>
+          <div>TigerGraph MCP provenance<br><b id="live-provenance-count" class="live-fact">—</b></div>
         </div>
       </div>
 
       <!-- Next-Best Action Interactive Stepper -->
       <div class="panel-card">
         <div class="panel-header">
-          <div class="panel-title">NEXT-BEST ACTION PROGRESSION</div>
+          <div class="panel-title">RECOMMENDED ACTIONS &amp; EVIDENCE PROGRESSION</div>
           <div style="font-size: 10px; color: #FEE101;">INITIAL &rarr; EVIDENCE &rarr; FINAL</div>
         </div>
 
@@ -258,27 +273,27 @@
           <div class="step-item">
             <div class="step-dot done"></div>
             <div class="step-label">1. ALERT TRIGGER INTAKE</div>
-            <div class="step-content" id="step-trigger-desc">Loading trigger details...</div>
+          <div class="step-content" id="step-trigger-desc">Run an investigation to load response details.</div>
           </div>
 
           <!-- Step 2 -->
           <div class="step-item">
             <div class="step-dot active"></div>
-            <div class="step-label">2. NEXT-BEST ACTIONS (BEFORE EVIDENCE)</div>
+            <div class="step-label">2. RECOMMENDED ACTIONS (INITIAL)</div>
             <div class="step-content" id="step-initial-actions"></div>
           </div>
 
           <!-- Step 3 -->
           <div class="step-item">
             <div class="step-dot done"></div>
-            <div class="step-label">3. STEP-UP EVIDENCE &amp; CARDHOLDER RESPONSE</div>
+            <div class="step-label">3. ADDITIONAL EVIDENCE RESULT (API RESPONSE)</div>
             <div class="step-content" id="step-evidence-sim"></div>
           </div>
 
           <!-- Step 4 -->
           <div class="step-item">
             <div class="step-dot done"></div>
-            <div class="step-label">4. NEXT-BEST ACTIONS (AFTER EVIDENCE)</div>
+            <div class="step-label">4. RECOMMENDED ACTIONS (FINAL)</div>
             <div class="step-content" id="step-final-actions"></div>
           </div>
         </div>
@@ -286,14 +301,14 @@
         <!-- Live Interactive Approval Buttons -->
         <div style="margin-top: 18px; border-top: 1px dashed rgba(254,225,1,0.3); padding-top: 14px;">
           <div style="font-size: 10px; color: #FEE101; font-weight: bold; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">
-            HUMAN-IN-THE-LOOP ANALYST CONTROLS:
+            ANALYST SIMULATION CONTROLS (NO CUSTOMER ACTION):
           </div>
           <div style="display: flex; gap: 8px; flex-wrap: wrap;" id="analyst-controls-bar">
-            <button class="action-exec-btn" onclick="executeAnalystAction('APPROVE_FINAL')">&#10003; EXECUTE FINAL ACTIONS</button>
-            <button class="action-exec-btn" style="background:#FF0080; color:#fff; border-color:#FF0080;" onclick="executeAnalystAction('ESCALATE_SUPERVISOR')">&#9888;&#65039; ESCALATE TO L2</button>
-            <button class="action-exec-btn" style="background:#00FFA3; color:#000; border-color:#00FFA3;" onclick="executeAnalystAction('OVERRIDE_BENIGN')">&#128737;&#65039; OVERRIDE &amp; DISMISS</button>
+            <button class="action-exec-btn" onclick="simulateAnalystAction('APPROVE_FINAL')">&#10003; SIMULATE APPROVAL</button>
+            <button class="action-exec-btn" style="background:#FF0080; color:#fff; border-color:#FF0080;" onclick="simulateAnalystAction('ESCALATE_SUPERVISOR')">&#9888;&#65039; SIMULATE ESCALATION</button>
+            <button class="action-exec-btn" style="background:#00FFA3; color:#000; border-color:#00FFA3;" onclick="simulateAnalystAction('OVERRIDE_BENIGN')">&#128737;&#65039; SIMULATE BENIGN OVERRIDE</button>
           </div>
-          <div id="action-execution-msg" style="margin-top: 8px; font-size: 11px; color: #00FFA3; display: none;"></div>
+          <div id="action-execution-msg" style="margin-top: 8px; font-size: 11px; color: #00E5FF; display: none;">Simulation only. No customer or graph action is executed.</div>
         </div>
       </div>
 
@@ -312,11 +327,14 @@
       <!-- Case Summary Narrative -->
       <div class="panel-card" style="margin-top: 18px;">
         <div class="panel-header">
-          <div class="panel-title">CASE INVESTIGATION SUMMARY</div>
+        <div class="panel-title">INVESTIGATION EXPLANATION</div>
         </div>
         <div id="case-summary-text" style="font-size: 12px; color: #FFFBE8; line-height: 1.65;">
-          Summary loading...
+          Run an investigation to populate this panel from the FastAPI response.
         </div>
+        <div id="action-execution-disclaimer" style="font-size:10px; color:#00E5FF; margin-top:7px;">Actions are recommendations only. This UI does not execute customer or case actions.</div>
+        <div id="investigation-stop-reason" style="font-size:11px; color:rgba(255,251,232,0.75); margin-top:8px;"></div>
+        <div id="recommendation-change-explanation" style="font-size:11px; color:#FEE101; margin-top:8px;"></div>
       </div>
 
     </div>
@@ -332,43 +350,34 @@
         <button class="filter-btn" onclick="closeSandboxModal()">&#10005; CLOSE</button>
       </div>
       <div style="font-size: 11px; color: #FFFBE8; margin-bottom: 16px;">
-        Test arbitrary transaction anomalies, customer disputes, and device proxies live through the autonomous multi-agent pipeline.
+        Demo scenario HHG-011. Transaction attributes and investigation results are read from the live FastAPI → TigerGraph MCP response. No customer action is performed.
       </div>
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
         <div>
           <label style="font-size: 10px; color: #FEE101; text-transform: uppercase;">Customer ID:</label>
-          <input type="text" id="sb-cust" class="sandbox-input" value="C99999" />
-          <label style="font-size: 10px; color: #FEE101; text-transform: uppercase;">Card ID:</label>
-          <input type="text" id="sb-card" class="sandbox-input" value="C99999-K1" />
+          <input type="text" id="sb-cust" class="sandbox-input" value="C11923" />
+          <label style="font-size: 10px; color: #FEE101; text-transform: uppercase;">Card ID (from HHG-011 case pack):</label>
+          <input type="text" id="sb-card" class="sandbox-input" value="" placeholder="Resolving from backend case pack…" readonly />
           <label style="font-size: 10px; color: #FEE101; text-transform: uppercase;">Transaction ID:</label>
-          <input type="text" id="sb-txn" class="sandbox-input" value="TXN_SANDBOX_01" />
+          <input type="text" id="sb-txn" class="sandbox-input" value="3000093" />
         </div>
         <div>
-          <label style="font-size: 10px; color: #FEE101; text-transform: uppercase;">Amount ($ USD):</label>
-          <input type="number" id="sb-amt" class="sandbox-input" value="1250.00" />
-          <label style="font-size: 10px; color: #FEE101; text-transform: uppercase;">Risk Score (0.0 - 1.0):</label>
-          <input type="number" id="sb-risk" class="sandbox-input" step="0.01" value="0.88" />
           <label style="font-size: 10px; color: #FEE101; text-transform: uppercase;">Trigger Type:</label>
           <select id="sb-trigger" class="sandbox-input">
+            <option value="customer_report" selected>customer_report</option>
             <option value="risk_score">risk_score</option>
-            <option value="customer_report">customer_report</option>
             <option value="analyst_request">analyst_request</option>
+          </select>
+          <label style="font-size: 10px; color: #FEE101; text-transform: uppercase;">Customer Response:</label>
+          <select id="sb-response" class="sandbox-input">
+            <option value="denied_transaction" selected>denied_transaction</option>
+            <option value="confirmed_authorized">confirmed_authorized</option>
+            <option value="subscription_acknowledged">subscription_acknowledged</option>
           </select>
         </div>
       </div>
-      <div style="display: flex; gap: 15px; margin-bottom: 16px; font-size: 11px;">
-        <label><input type="checkbox" id="sb-proxy" checked /> Anonymous Proxy / Tor</label>
-        <label><input type="checkbox" id="sb-rec" /> Recurring Subscription</label>
-      </div>
-      <div style="margin-bottom: 16px;">
-        <label style="font-size: 10px; color: #FEE101; text-transform: uppercase;">Customer Response Simulation:</label>
-        <select id="sb-response" class="sandbox-input">
-          <option value="denied_transaction">denied_transaction (Customer Denies Fraud)</option>
-          <option value="confirmed_authorized">confirmed_authorized (Customer Validates Travel)</option>
-          <option value="subscription_acknowledged">subscription_acknowledged (Customer Forgot Subscription)</option>
-        </select>
-      </div>
-      <button class="action-exec-btn" style="width: 100%; padding: 10px; font-size: 12px;" onclick="runSandboxInvestigation()">EXECUTE MULTI-AGENT INVESTIGATION</button>
+      <button id="run-investigation-button" class="action-exec-btn" style="width: 100%; padding: 10px; font-size: 12px; margin-top:12px;" onclick="runSandboxInvestigation()">RUN INVESTIGATION</button>
+      <div id="sandbox-loading" role="status" aria-live="polite" style="margin-top:8px; color:#00E5FF; font-size:11px; display:none;">Running live investigation…</div>
       <div id="sandbox-results" style="margin-top: 16px; display: none;"></div>
     </div>
   </div>

@@ -67,6 +67,21 @@ python -m uvicorn app.web_app:app --host 127.0.0.1 --port 8001
 
 Open the API at [http://127.0.0.1:8001](http://127.0.0.1:8001).
 
+### Live TigerGraph MCP demo
+
+To run the TigerDetect live investigation UI against `HHGOA_Fraud`, load the connection values from the local VS Code MCP configuration into the current PowerShell session, then start FastAPI:
+
+```powershell
+$tg = (Get-Content .vscode/mcp.json -Raw | ConvertFrom-Json).servers.tigergraph.env
+$env:TG_HOST = $tg.TG_HOST
+$env:TG_SECRET = $tg.TG_SECRET
+$env:TG_GRAPHNAME = "HHGOA_Fraud"
+$env:GRAPH_BACKEND_MODE = "mcp"
+python -m uvicorn app.web_app:app --reload --host 127.0.0.1 --port 8001
+```
+
+Open [http://127.0.0.1:8001](http://127.0.0.1:8001), choose **RUN INVESTIGATION**, and submit the prefilled HHG-011 demo for customer `C11923` and transaction `3000093`. The card ID is read from the backend `/api/cases` response. Transaction details and investigation results are rendered from `POST /api/investigate`; no frontend CSV lookup is used. TigerGraph MCP evidence is read-only, case memory remains process-local, and the analyst controls are simulations. Displayed actions are recommendations and are not executed.
+
 The Streamlit analyst workbench can be started with:
 
 ```powershell

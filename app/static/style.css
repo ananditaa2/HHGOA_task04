@@ -921,6 +921,38 @@ svg.loading-logo { overflow: visible; }
   vertical-align: middle;
 }
 
+.live-fact {
+  display: inline-block;
+  margin-top: 3px;
+  color: var(--accent-yellow);
+  overflow-wrap: anywhere;
+}
+
+.sandbox-result-status {
+  background: rgba(0, 0, 0, 0.55);
+  border-left: 3px solid var(--accent-green);
+  border-radius: 4px;
+  color: var(--text-offwhite);
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 9px 11px;
+}
+
+.sandbox-error {
+  border-left-color: var(--brand-pink);
+  color: #FFF;
+  white-space: pre-wrap;
+}
+
+#run-investigation-button:disabled {
+  cursor: wait;
+  opacity: 0.75;
+}
+
+#graph-canvas:empty {
+  min-height: 24px;
+}
+
 @keyframes livePulse {
   0%, 100% { box-shadow: 0 0 4px var(--accent-green); }
   50% { box-shadow: 0 0 16px var(--accent-green); }

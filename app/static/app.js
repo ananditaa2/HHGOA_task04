@@ -18,11 +18,10 @@ document.addEventListener("DOMContentLoaded", () => {
 async function fetchCases() {
   try {
     const res = await fetch("/api/cases");
+    if (!res.ok) throw new Error(await responseError(res));
     allCases = await res.json();
     renderCaseStrip(allCases);
-    if (allCases.length > 0) {
-      await selectCase(allCases[0].case_id);
-    }
+    resolveDemoCardId();
   } catch (err) {
     console.error("Failed to load cases:", err);
   } finally {
@@ -31,6 +30,30 @@ async function fetchCases() {
       if (loader) loader.classList.add("hidden");
     }, 600);
   }
+}
+
+async function responseError(response) {
+  const body = await response.text();
+  try {
+    const parsed = JSON.parse(body);
+    return typeof parsed.detail === "string" ? parsed.detail : JSON.stringify(parsed.detail || parsed);
+  } catch (_) {
+    return body || response.statusText || "Unknown API error";
+  }
+}
+
+function resolveDemoCardId() {
+  const cardInput = document.getElementById("sb-card");
+  if (!cardInput || !allCases.length) return false;
+  const caseRow = allCases.find(row => row.case_id === "HHG-011" && row.customer_id === "C11923");
+  if (!caseRow || !caseRow.card_id) {
+    cardInput.value = "";
+    cardInput.placeholder = "HHG-011 card ID unavailable from /api/cases";
+    return false;
+  }
+  cardInput.value = caseRow.card_id;
+  cardInput.placeholder = "Resolved from /api/cases";
+  return true;
 }
 
 function renderCaseStrip(cases) {
@@ -89,174 +112,199 @@ async function selectCase(caseId) {
   }
 }
 
-function updateUI(caseData) {
-  const trig = caseData.trigger || {};
-  const inv = caseData.investigation || {};
-  const nba = caseData.next_best_actions || {};
-  const sar = caseData.sar || {};
-  const isFraud = inv.verdict === "FRAUD";
+function apiValue(value) {
+  return value === null || value === undefined || value === "" ? "Not provided by API" : String(value);
+}
 
-  // 1. Hero Banner
-  document.getElementById("active-case-id").innerText = caseData.case_id;
+function recommendationSafeExplanation(summary, actions) {
+  const actionNames = new Set(actions.map(action => String(action.action || "").toUpperCase()));
+  return String(summary || "").replace(/\bcard\s+blocked(?:\s+under\s+R\d+)?\b/gi, () =>
+    actionNames.has("BLOCK_CARD") ? "BLOCK_CARD is recommended (not executed)" : "card action status is not confirmed by the API"
+  ).replace(/\bcase\s+created(?:\s+under\s+R\d+)?\b/gi, () =>
+    actionNames.has("CREATE_CASE") ? "CREATE_CASE is recommended (not executed)" : "case creation status is not confirmed by the API"
+  );
+}
+
+function renderActionRecommendations(containerId, actions, accentColor) {
+  const box = document.getElementById(containerId);
+  box.replaceChildren();
+  if (!actions.length) {
+    box.textContent = "No recommendations returned by the API.";
+    return;
+  }
+  actions.forEach(action => {
+    const card = document.createElement("div");
+    card.className = "action-card";
+    const details = document.createElement("div");
+    const code = document.createElement("span");
+    code.className = "action-code";
+    code.style.color = accentColor;
+    code.textContent = apiValue(action.action);
+    const reason = document.createElement("div");
+    reason.style.cssText = "font-size:10px; color:#FFFBE8; margin-top:2px;";
+    reason.textContent = apiValue(action.reason);
+    details.append(code, reason);
+    const route = document.createElement("span");
+    const routeValue = String(action.route || action.approval_route || "").toUpperCase();
+    route.className = `route-badge ${routeValue === "L2" ? "route-l2" : routeValue === "L1" ? "route-l1" : "route-auto"}`;
+    route.textContent = routeValue || "ROUTE NOT PROVIDED";
+    card.append(details, route);
+    box.appendChild(card);
+  });
+}
+
+function updateUI(response) {
+  const inv = response.case || response.investigation || {};
+  const nba = response.next_best_actions || {};
+  const sar = response.sar || {};
+  const evidence = Array.isArray(inv.evidence) ? inv.evidence : [];
+  const transactionEvidence = evidence.find(item => item.signal === "graph_transaction");
+  const transaction = transactionEvidence && transactionEvidence.value && typeof transactionEvidence.value === "object"
+    ? transactionEvidence.value : {};
+  const isLiveResponse = Boolean(transactionEvidence && response.next_best_actions && Array.isArray(nba.final));
+  const isFraud = String(inv.verdict || "").toLowerCase() === "fraud";
+
+  currentCase = response;
+  document.getElementById("active-case-id").textContent = apiValue(response.case_id);
   const verdictBadge = document.getElementById("active-verdict-badge");
-  verdictBadge.innerText = inv.verdict;
+  verdictBadge.textContent = apiValue(inv.verdict).toUpperCase();
   verdictBadge.style.background = isFraud ? "#FF0080" : "#00FFA3";
   verdictBadge.style.color = isFraud ? "#FFF" : "#000";
 
   const sarBadge = document.getElementById("active-sar-badge");
-  if (sar.file) {
-    sarBadge.style.display = "inline-block";
-    sarBadge.innerText = "SAR REQUIRED (L2)";
-  } else {
-    sarBadge.style.display = "none";
+  sarBadge.style.display = sar.file ? "inline-block" : "none";
+  if (sar.file) sarBadge.textContent = "SAR RECOMMENDED (L2)";
+  document.getElementById("active-pattern").textContent = apiValue(inv.pattern).toUpperCase();
+  const exposure = inv.exposure_usd;
+  document.getElementById("active-exposure").textContent = exposure === null || exposure === undefined
+    ? "Not provided by API" : `$${Number(exposure).toLocaleString("en-US", {minimumFractionDigits: 2})} USD`;
+  const fraudProbability = inv.fraud_probability;
+  document.getElementById("active-prob").textContent = fraudProbability === null || fraudProbability === undefined
+    ? "Not provided by API" : `${(Number(fraudProbability) * 100).toFixed(1)}%`;
+  document.getElementById("active-opened").textContent = apiValue(response.opened_at);
+
+  const memoryStatus = document.getElementById("case-memory-status");
+  memoryStatus.textContent = inv.written_to_graph === false ? "CASE MEMORY: PROCESS-LOCAL" :
+    (inv.written_to_graph === true ? "CASE MEMORY: GRAPH WRITE REPORTED BY API" : "CASE MEMORY: NOT REPORTED BY API");
+  memoryStatus.style.color = inv.written_to_graph === false ? "#00E5FF" : "#FEE101";
+
+  // The graph panel only renders topology included by the response. Live investigation
+  // responses currently provide evidence paths but no entity topology.
+  renderVisGraph(response.graph);
+
+  const mcpEvidence = evidence.filter(item => item.source === "tigergraph_mcp");
+  const provenanceRefs = [...new Set(mcpEvidence.map(item => item.ref).filter(Boolean))];
+  const provenanceBox = document.getElementById("provenance-path-text");
+  provenanceBox.textContent = provenanceRefs.length
+    ? `${provenanceRefs[0]}${provenanceRefs.length > 1 ? ` (+${provenanceRefs.length - 1} more TigerGraph MCP references)` : ""}`
+    : "No provenance references returned by the API.";
+
+  const transactionPanel = document.getElementById("live-transaction-panel");
+  transactionPanel.style.display = isLiveResponse ? "block" : "none";
+  if (isLiveResponse) {
+    const customerEvidence = evidence.find(item => item.signal === "graph_customer");
+    const customerId = customerEvidence && customerEvidence.value ? customerEvidence.value.customer_id : undefined;
+    const riskEvidence = evidence.find(item => item.signal === "risk_score_evaluation");
+    const riskScore = transaction.risk_score ?? (riskEvidence ? riskEvidence.value : undefined);
+    const sourceLabel = document.getElementById("evidence-source-label");
+    sourceLabel.textContent = mcpEvidence.length ? "Evidence Source: TigerGraph MCP" : "Evidence Source: Not provided by API";
+    document.getElementById("live-customer-id").textContent = apiValue(customerId);
+    document.getElementById("live-transaction-id").textContent = apiValue(transaction.transaction_id);
+    document.getElementById("live-amount").textContent = transaction.amount === undefined ? "Not provided by API" : `$${Number(transaction.amount).toFixed(2)}`;
+    document.getElementById("live-timestamp").textContent = apiValue(transaction.timestamp);
+    document.getElementById("live-risk-score").textContent = apiValue(riskScore);
+    document.getElementById("live-channel").textContent = apiValue(transaction.channel);
+    document.getElementById("live-product-cd").textContent = apiValue(transaction.ProductCD);
+    document.getElementById("live-evidence-count").textContent = String(evidence.length);
+    document.getElementById("live-provenance-count").textContent = `${provenanceRefs.length} references`;
   }
 
-  document.getElementById("active-pattern").innerText = (inv.pattern || "ANOMALY").toUpperCase();
-  document.getElementById("active-exposure").innerText = `$${Number(inv.exposure_usd || 0).toLocaleString("en-US", {minimumFractionDigits: 2})} USD`;
-  document.getElementById("active-prob").innerText = `${((inv.fraud_probability || 0) * 100).toFixed(1)}%`;
-  document.getElementById("active-opened").innerText = caseData.opened_at ? caseData.opened_at.split("T")[0] : "2016-12-05";
-
-  // 2. Vis.js Force-Directed Interactive Graph
-  renderVisGraph(caseData.graph);
-
-  // 3. Provenance Path Display (Innovation 6)
-  const paths = inv.provenance_paths || [];
-  document.getElementById("provenance-path-text").innerText = paths[0] || "(Customer)-[:OWNS]->(Card)-[:MADE]->(Txn)";
-
-  // 4. Evidence Conflict Meter (Rule R8 / Innovation 2)
-  const confScore = Number(inv.conflict_score || 0);
-  document.getElementById("conflict-score-val").innerText = `${confScore.toFixed(3)} / 1.000`;
+  const conflictValue = inv.conflict_score;
+  const confScore = conflictValue !== null && conflictValue !== undefined && Number.isFinite(Number(conflictValue))
+    ? Number(conflictValue) : null;
+  document.getElementById("conflict-score-val").textContent = confScore === null
+    ? "Not provided by API" : `${confScore.toFixed(3)} / 1.000`;
   const meterFill = document.getElementById("conflict-meter-fill");
-  meterFill.style.width = `${Math.min(100, Math.round(confScore * 100))}%`;
-
+  meterFill.style.width = confScore === null ? "0%" : `${Math.min(100, Math.max(0, Math.round(confScore * 100)))}%`;
+  const uncertainty = inv.uncertainty_level;
   const uncertPill = document.getElementById("uncertainty-pill");
-  uncertPill.innerText = `UNCERTAINTY: ${(inv.uncertainty_level || "low").toUpperCase()}`;
-  if (confScore >= 0.40) {
-    uncertPill.style.background = "#FF0080";
-  } else if (confScore >= 0.20) {
-    uncertPill.style.background = "#FEE101";
-    uncertPill.style.color = "#000";
-  } else {
-    uncertPill.style.background = "#00FFA3";
-    uncertPill.style.color = "#000";
-  }
+  uncertPill.textContent = `UNCERTAINTY: ${apiValue(uncertainty).toUpperCase()}`;
+  uncertPill.style.background = String(uncertainty).toLowerCase() === "high" ? "#FF0080" :
+    String(uncertainty).toLowerCase() === "medium" ? "#FEE101" : "#00FFA3";
+  uncertPill.style.color = String(uncertainty).toLowerCase() === "medium" || String(uncertainty).toLowerCase() === "low" ? "#000" : "#FFF";
+  document.getElementById("uncertainty-basis-display").textContent = apiValue(inv.uncertainty_basis);
 
   const signalsList = document.getElementById("conflict-signals-list");
-  signalsList.innerHTML = "";
+  signalsList.replaceChildren();
   const conflictingPairs = inv.conflicting_signals || [];
-  if (conflictingPairs.length > 0) {
-    conflictingPairs.forEach(p => {
-      const div = document.createElement("div");
-      div.className = "signal-pair-badge";
-      div.innerHTML = `<span style="color:#FF0080; font-weight:bold;">[DISAGREEING SIGNAL]</span> ${p.details || ""}`;
-      signalsList.appendChild(div);
+  if (conflictingPairs.length) {
+    conflictingPairs.forEach(pair => {
+      const item = document.createElement("div");
+      item.className = "signal-pair-badge";
+      item.textContent = `[DISAGREEING SIGNAL] ${apiValue(pair.details || pair.signal)}`;
+      signalsList.appendChild(item);
     });
   } else {
-    signalsList.innerHTML = `<div style="color:#FFFBE8; font-size:11px; opacity:0.8;">No significant signal discordance. Signals converge harmoniously.</div>`;
+    signalsList.textContent = "No conflicting signals were returned by the API.";
   }
 
-  // 5. Devil's Advocate Adversarial Critique (Innovation 5)
-  const da = inv.devils_advocate || {};
-  document.getElementById("innocent-score-badge").innerText = `Innocent P: ${Number(da.innocent_score || 0).toFixed(2)}`;
-  const daHypo = document.getElementById("devils-advocate-hypo");
-  if (da.hypotheses && da.hypotheses.length > 0) {
-    daHypo.innerText = `"${da.hypotheses[0]}"`;
-  } else {
-    daHypo.innerText = "Evidence of deliberate criminal compromise is robust. No benign explanation viable.";
-  }
+  const criticVerdict = inv.devil_advocate_verdict || (inv.devils_advocate && inv.devils_advocate.verdict);
+  const criticScore = inv.innocent_explanation_score ?? (inv.devils_advocate && inv.devils_advocate.innocent_score);
+  document.getElementById("devils-advocate-verdict").textContent = apiValue(criticVerdict);
+  document.getElementById("innocent-score-badge").textContent = criticScore === undefined
+    ? "Innocent score: Not provided by API" : `Innocent P: ${Number(criticScore).toFixed(2)}`;
+  const hypotheses = inv.alternative_hypotheses || (inv.devils_advocate && inv.devils_advocate.hypotheses) || [];
+  document.getElementById("devils-advocate-hypo").textContent = hypotheses.length
+    ? hypotheses.join("\n") : "No alternative hypotheses were returned by the API.";
 
-  // 6. Time-Decay Precedents (Innovation 4)
   const precList = document.getElementById("precedents-list");
-  precList.innerHTML = "";
-  const precedents = inv.similar_precedents || [];
-  if (precedents.length > 0) {
-    precedents.forEach(pr => {
-      const pDiv = document.createElement("div");
-      pDiv.style.cssText = "background: #074424; border-left: 3px solid #00E5FF; padding: 8px 12px; border-radius: 4px; font-size: 11px;";
-      pDiv.innerHTML = `
-        <div style="display:flex; justify-content:space-between;">
-          <span style="color:#00E5FF; font-weight:bold;">${pr.case_id} (${pr.outcome})</span>
-          <span style="color:#FEE101; font-weight:bold;">Weight: ${Number(pr.time_decay_weight || 1).toFixed(4)}</span>
-        </div>
-        <div style="color:#FFFBE8; margin-top:2px;">Pattern: ${pr.pattern} | Exposure: $${Number(pr.exposure_usd || 0).toFixed(2)} | Closed: ${pr.days_prior || 30} days prior</div>
-      `;
-      precList.appendChild(pDiv);
+  precList.replaceChildren();
+  const precedents = inv.similar_precedents || inv.similar_prior_cases || [];
+  if (precedents.length) {
+    precedents.forEach(precedent => {
+      const item = document.createElement("div");
+      item.style.cssText = "background:#074424; border-left:3px solid #00E5FF; padding:8px 12px; border-radius:4px; font-size:11px;";
+      item.textContent = typeof precedent === "string" ? precedent :
+        `${apiValue(precedent.case_id)} · ${apiValue(precedent.pattern)} · weight ${apiValue(precedent.time_decay_weight)}`;
+      precList.appendChild(item);
     });
   } else {
-    precList.innerHTML = `<div style="font-size:11px; color:#FFFBE8; opacity:0.8;">No matching historical cases in retrieval window.</div>`;
+    precList.textContent = "No precedent records returned by the API.";
   }
 
-  // 7. Next-Best Action Progression Stepper
-  // Step 1: Trigger
-  document.getElementById("step-trigger-desc").innerHTML = `
-    Trigger Event: <b style="color:#FF0080;">${trig.type}</b> | Flagged Txn: <b style="color:#00FFA3;">${trig.flagged_txn_id}</b><br/>
-    Card: <b style="color:#FEE101;">${trig.card_id}</b> | Customer: ${trig.customer_id} | Risk Score: ${trig.risk_score}
-  `;
+  const triggerType = response.trigger_type || (response.trigger && response.trigger.type);
+  document.getElementById("step-trigger-desc").textContent =
+    `Trigger: ${apiValue(triggerType)} | Customer: ${isLiveResponse ? apiValue(evidence.find(item => item.signal === "graph_customer")?.value?.customer_id) : apiValue(response.trigger && response.trigger.customer_id)} | Transaction: ${apiValue(transaction.transaction_id || (response.trigger && response.trigger.flagged_txn_id))}`;
+  renderActionRecommendations("step-initial-actions", nba.initial || nba.initial_recommendations || [], "#FEE101");
+  renderActionRecommendations("step-final-actions", nba.final || nba.final_recommendations || [], "#00FFA3");
 
-  // Step 2: Recommendations BEFORE Evidence
-  const initActionsBox = document.getElementById("step-initial-actions");
-  initActionsBox.innerHTML = "";
-  (nba.initial_recommendations || []).forEach(a => {
-    const actCard = document.createElement("div");
-    actCard.className = "action-card";
-    const routeClass = a.approval_route === "L2" ? "route-l2" : (a.approval_route === "L1" ? "route-l1" : "route-auto");
-    actCard.innerHTML = `
-      <div>
-        <span class="action-code">${a.action}</span>
-        <div style="font-size:10px; color:#FFFBE8; margin-top:2px;">${a.reason}</div>
-      </div>
-      <span class="route-badge ${routeClass}">${a.approval_route.toUpperCase()}</span>
-    `;
-    initActionsBox.appendChild(actCard);
-  });
-
-  // Step 3: Controlled Evidence Request & Response Simulation
   const evSimBox = document.getElementById("step-evidence-sim");
-  evSimBox.innerHTML = "";
-  const resps = nba.simulated_responses || [];
-  if (resps.length > 0) {
-    resps.forEach(r => {
-      const rDiv = document.createElement("div");
-      rDiv.style.cssText = "background: #074424; border-left: 2px solid #00E5FF; padding: 6px 10px; border-radius: 4px; margin-bottom: 6px;";
-      rDiv.innerHTML = `
-        <div style="color:#00E5FF; font-weight:bold; font-size:10px;">${r.responder.toUpperCase()} RESPONSE (${r.status}):</div>
-        <div style="color:#FFFBE8; font-size:11px; margin-top:2px;">${r.message}</div>
-      `;
-      evSimBox.appendChild(rDiv);
+  evSimBox.replaceChildren();
+  const evidenceResults = response.evidence_requests || [];
+  if (evidenceResults.length) {
+    evidenceResults.forEach((item, index) => {
+      const row = document.createElement("div");
+      row.style.cssText = "background:#074424; border-left:2px solid #00E5FF; padding:6px 10px; border-radius:4px; margin-bottom:6px;";
+      row.textContent = `Evidence ${index + 1} (${apiValue(item.type)}): ${apiValue(item.assumed_response)}`;
+      evSimBox.appendChild(row);
     });
   } else {
-    evSimBox.innerHTML = `<div style="color:#FFFBE8; font-size:11px;">Sufficient deterministic signals gathered; no out-of-band step-up needed.</div>`;
+    evSimBox.textContent = "No additional evidence result was returned by the API.";
   }
 
-  // Step 4: Recommendations AFTER Evidence (Final)
-  const finalActionsBox = document.getElementById("step-final-actions");
-  finalActionsBox.innerHTML = "";
-  (nba.final_recommendations || []).forEach(a => {
-    const actCard = document.createElement("div");
-    actCard.className = "action-card";
-    const routeClass = a.approval_route === "L2" ? "route-l2" : (a.approval_route === "L1" ? "route-l1" : "route-auto");
-    actCard.innerHTML = `
-      <div>
-        <span class="action-code" style="color:#00FFA3;">${a.action}</span>
-        <div style="font-size:10px; color:#FFFBE8; margin-top:2px;">${a.reason}</div>
-      </div>
-      <span class="route-badge ${routeClass}">${a.approval_route.toUpperCase()}</span>
-    `;
-    finalActionsBox.appendChild(actCard);
-  });
-
-  // 8. FinCEN SAR Panel
   const sarContainer = document.getElementById("sar-container");
+  sarContainer.style.display = sar.file ? "block" : "none";
   if (sar.file) {
-    sarContainer.style.display = "block";
-    document.getElementById("sar-reason-text").innerText = sar.reason || "";
-    document.getElementById("sar-narrative-preview").innerText = sar.narrative || "";
-  } else {
-    sarContainer.style.display = "none";
+    document.getElementById("sar-reason-text").textContent = apiValue(sar.reason);
+    document.getElementById("sar-narrative-preview").textContent = apiValue(sar.narrative);
   }
 
-  // 9. Case Summary Text
-  document.getElementById("case-summary-text").innerText = caseData.summary || "Investigation concluded.";
+  const finalActions = nba.final || nba.final_recommendations || [];
+  document.getElementById("case-summary-text").textContent = apiValue(
+    recommendationSafeExplanation(inv.summary, finalActions)
+  );
+  document.getElementById("investigation-stop-reason").textContent = `Stop reason: ${apiValue(response.stop_reason)}`;
+  document.getElementById("recommendation-change-explanation").textContent = `Recommendation explanation: ${apiValue(nba.what_changed)}`;
   document.getElementById("action-execution-msg").style.display = "none";
 }
 
@@ -264,11 +312,35 @@ function updateUI(caseData) {
 // Vis.js Interactive Network Graph
 // ----------------------------------------------------------------------------
 function renderVisGraph(graphData) {
-  if (!graphData) return;
   const container = document.getElementById("graph-canvas");
+  const legend = document.getElementById("graph-legend");
+  document.getElementById("node-inspector-box").style.display = "none";
+  if (visNetwork) {
+    visNetwork.destroy();
+    visNetwork = null;
+  }
+  if (!graphData || !Array.isArray(graphData.nodes) || graphData.nodes.length === 0) {
+    visNodes = null;
+    visEdges = null;
+    container.style.display = "flex";
+    container.style.alignItems = "center";
+    container.style.justifyContent = "center";
+    container.replaceChildren();
+    container.textContent = "No graph entities were returned by the investigation API.";
+    legend.replaceChildren();
+    return;
+  }
 
+  container.style.display = "block";
   visNodes = new vis.DataSet(graphData.nodes || []);
   visEdges = new vis.DataSet(graphData.edges || []);
+  legend.replaceChildren();
+  [...new Set(graphData.nodes.map(node => node.type).filter(Boolean))].forEach(type => {
+    const label = document.createElement("span");
+    label.textContent = `• ${type}`;
+    legend.appendChild(label);
+  });
+  container.replaceChildren();
 
   const data = { nodes: visNodes, edges: visEdges };
   const options = {
@@ -333,7 +405,7 @@ function toggleGraphPhysics() {
   visNetwork.setOptions({ physics: { enabled: physicsEnabled } });
   const btn = document.getElementById("btn-physics-toggle");
   if (btn) {
-    btn.innerText = physicsEnabled ? "⚡ FREEZE" : "▶ UNFREEZE";
+    btn.innerText = physicsEnabled ? "[!] FREEZE" : "[>] UNFREEZE";
     btn.style.color = physicsEnabled ? "#FEE101" : "#00FFA3";
   }
 }
@@ -343,7 +415,7 @@ function showToast(message) {
   if (existing) existing.remove();
   const toast = document.createElement("div");
   toast.className = "hh-toast";
-  toast.innerHTML = `<span>⚡</span> <span>${message}</span>`;
+  toast.innerHTML = `<span>[!]</span> <span>${message}</span>`;
   document.body.appendChild(toast);
   setTimeout(() => {
     toast.style.opacity = "0";
@@ -361,9 +433,9 @@ function showNodeInspector(node) {
   details.innerHTML = `
     <div><b>Node ID:</b> <span style="color:#FEE101;">${node.id}</span></div>
     <div><b>Entity Type:</b> <span style="color:${typeColor}; font-weight:bold;">${node.type || "Entity"}</span></div>
-    <div><b>Visual Label:</b> ${node.label.replace("\n", " — ")}</div>
+    <div><b>Visual Label:</b> ${node.label.replace("\n", "  --  ")}</div>
     <div style="font-size:10px; color:#FFFBE8; opacity:0.8; margin-top:4px;">
-      🔗 <b>Graph Topology:</b> Multi-hop neighborhood active. Degrees connected: ${visEdges.get({ filter: e => e.from === node.id || e.to === node.id }).length}.
+      [GRAPH] <b>Graph Topology:</b> Multi-hop neighborhood active. Degrees connected: ${visEdges.get({ filter: e => e.from === node.id || e.to === node.id }).length}.
     </div>
   `;
 }
@@ -371,28 +443,10 @@ function showNodeInspector(node) {
 // ----------------------------------------------------------------------------
 // Human-in-the-Loop Analyst Action Execution
 // ----------------------------------------------------------------------------
-async function executeAnalystAction(actionType) {
-  if (!currentCase) return;
+function simulateAnalystAction(actionType) {
   const msgBox = document.getElementById("action-execution-msg");
   msgBox.style.display = "block";
-
-  try {
-    const res = await fetch("/api/action/approve", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: actionType,
-        case_id: currentCase.case_id,
-        approval_route: actionType === "ESCALATE_SUPERVISOR" ? "L2" : "L1"
-      })
-    });
-    const result = await res.json();
-    msgBox.innerHTML = `✓ <b>${result.status}:</b> ${result.message}`;
-    showToast(`${result.status}: ${result.action} on ${result.case_id} (${result.approval_route})`);
-  } catch (err) {
-    msgBox.innerHTML = `⚠️ Execution failed: ${err.message}`;
-    showToast(`Failed: ${err.message}`);
-  }
+  msgBox.textContent = `SIMULATION ONLY: ${actionType}. No action endpoint was called; no customer or TigerGraph action was executed.`;
 }
 
 // ----------------------------------------------------------------------------
@@ -438,55 +492,71 @@ function copySARNarrative() {
 }
 
 function openSandboxModal() {
+  resolveDemoCardId();
   document.getElementById("sandbox-modal").classList.add("open");
 }
 function closeSandboxModal() {
   document.getElementById("sandbox-modal").classList.remove("open");
 }
 
+async function ensureDemoCardId() {
+  if (resolveDemoCardId()) return document.getElementById("sb-card").value;
+  const response = await fetch("/api/cases");
+  if (!response.ok) throw new Error(`Unable to resolve the HHG-011 card ID: ${await responseError(response)}`);
+  allCases = await response.json();
+  renderCaseStrip(allCases);
+  if (!resolveDemoCardId()) throw new Error("The backend /api/cases response did not contain a card ID for HHG-011 / C11923.");
+  return document.getElementById("sb-card").value;
+}
+
 async function runSandboxInvestigation() {
   const resDiv = document.getElementById("sandbox-results");
+  const runButton = document.getElementById("run-investigation-button");
+  const loading = document.getElementById("sandbox-loading");
   resDiv.style.display = "block";
-  resDiv.innerHTML = "Executing Multi-Agent Detective on custom transaction parameters...";
-
-  const payload = {
-    customer_id: document.getElementById("sb-cust").value,
-    card_id: document.getElementById("sb-card").value,
-    flagged_txn_id: document.getElementById("sb-txn").value,
-    amount: parseFloat(document.getElementById("sb-amt").value),
-    risk_score: parseFloat(document.getElementById("sb-risk").value),
-    trigger_type: document.getElementById("sb-trigger").value,
-    is_proxy: document.getElementById("sb-proxy").checked,
-    is_recurring: document.getElementById("sb-rec").checked,
-    customer_response: document.getElementById("sb-response").value
-  };
+  resDiv.className = "sandbox-result-status";
+  resDiv.removeAttribute("role");
+  resDiv.textContent = "Submitting the investigation to FastAPI…";
+  runButton.disabled = true;
+  runButton.textContent = "RUNNING…";
+  loading.style.display = "block";
 
   try {
-    const res = await fetch("/api/investigate", {
+    const cardId = await ensureDemoCardId();
+    const payload = {
+      customer_id: document.getElementById("sb-cust").value.trim(),
+      card_id: cardId,
+      flagged_txn_id: document.getElementById("sb-txn").value.trim(),
+      // Required compatibility fields. In MCP mode the transaction values come from TigerGraph MCP.
+      amount: 0,
+      risk_score: 0,
+      trigger_type: document.getElementById("sb-trigger").value,
+      customer_response: document.getElementById("sb-response").value
+    };
+    if (!payload.customer_id || !payload.flagged_txn_id) {
+      throw new Error("Customer ID and transaction ID are required.");
+    }
+    const response = await fetch("/api/investigate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
-    const result = await res.json();
-    resDiv.innerHTML = `
-      <div style="background:#000; border:2px solid #FEE101; border-radius:8px; padding:12px;">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <span style="font-weight:bold; font-size:14px; color:#FEE101;">VERDICT: ${result.investigation.verdict}</span>
-          <span class="badge-goa">${result.sar.file ? "SAR FILED" : "NO SAR"}</span>
-        </div>
-        <div style="margin-top:6px; font-size:11px; color:#FFFBE8;">
-          Pattern: <b>${result.investigation.pattern}</b> | Exposure: <b>$${result.investigation.exposure_usd}</b> | Conflict: <b>${result.investigation.conflict_score}</b>
-        </div>
-        <div style="margin-top:6px; font-size:11px; color:#00FFA3;">
-          Final Actions: ${result.next_best_actions.final_recommendations.map(a => `${a.action} (${a.approval_route})`).join(", ")}
-        </div>
-      </div>
-    `;
-  } catch (err) {
-    resDiv.innerHTML = `Error executing investigation: ${err.message}`;
+    if (!response.ok) throw new Error(`FastAPI returned ${response.status}: ${await responseError(response)}`);
+    const result = await response.json();
+    if (!result.case || !result.next_best_actions) throw new Error("FastAPI response did not contain the expected investigation fields.");
+    updateUI(result);
+    resDiv.textContent = `Investigation response received for ${apiValue(result.case_id)}. Result panels now show values returned by the API.`;
+    closeSandboxModal();
+  } catch (error) {
+    resDiv.className = "sandbox-result-status sandbox-error";
+    resDiv.setAttribute("role", "alert");
+    resDiv.textContent = `Investigation failed: ${error.message}`;
+  } finally {
+    runButton.disabled = false;
+    runButton.textContent = "RUN INVESTIGATION";
+    loading.style.display = "none";
   }
 }
-
 async function runQAAuditModal() {
   const modal = document.getElementById("qa-modal");
   const body = document.getElementById("qa-modal-body");

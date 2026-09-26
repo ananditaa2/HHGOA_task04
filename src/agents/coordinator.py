@@ -175,11 +175,18 @@ class InvestigationCoordinator:
         is_fraud = verdict == "fraud"
 
         if not is_fraud:
-            affected, first_susp, exposure = [], "", 0.0
+            affected, first_susp = [], ""
+            exposure = (
+                round(abs(_f(context.exposure_usd)), 2)
+                if self.graph.is_mcp else 0.0
+            )
         else:
             affected = list(dict.fromkeys(context.affected_txn_ids))
             first_susp = affected[0] if affected else ""
-            exposure = round(sum(abs(_f(self._txn_amount(t))) for t in affected), 2)
+            if self.graph.is_mcp:
+                exposure = round(abs(_f(context.exposure_usd)), 2)
+            else:
+                exposure = round(sum(abs(_f(self._txn_amount(t))) for t in affected), 2)
 
         # Evidence list in README shape
         evidence_out: List[Dict[str, Any]] = []
@@ -190,6 +197,9 @@ class InvestigationCoordinator:
                 entity_ids = entity_ids + connected_cards[:5]
             evidence_out.append({
                 "claim": ev.get("description", ""),
+                "signal": ev.get("signal", ""),
+                "value": ev.get("value"),
+                "weight": ev.get("weight", 0.0),
                 "source": (
                     "tigergraph_mcp"
                     if self.graph.is_mcp and ev.get("source") == "tigergraph_mcp"
@@ -310,6 +320,13 @@ class InvestigationCoordinator:
                 "status": status,
                 "verdict": verdict,
                 "fraud_probability": context.fraud_probability,
+                "conflict_score": context.conflict_score,
+                "conflicting_signals": context.conflicting_signals,
+                "uncertainty_level": context.uncertainty_level,
+                "uncertainty_basis": context.trigger_details.get("uncertainty_basis"),
+                "devil_advocate_verdict": context.devil_advocate_verdict,
+                "innocent_explanation_score": context.innocent_explanation_score,
+                "alternative_hypotheses": context.alternative_hypotheses,
                 "pattern": pattern,
                 "pattern_description": pattern_description,
                 "affected_txn_ids": affected,

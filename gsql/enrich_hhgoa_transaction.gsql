@@ -1,0 +1,16 @@
+// Targeted HHGOA_Fraud enrichment migration.
+// Apply only to the existing HHGOA_Fraud graph; no vertex or edge types change.
+USE GRAPH HHGOA_Fraud
+
+ALTER VERTEX Transaction ADD ATTRIBUTE (
+    amount DOUBLE,
+    ts DATETIME,
+    risk_score DOUBLE,
+    channel STRING,
+    product_cd STRING,
+    device_type STRING,
+    device_info STRING,
+    id_15 STRING,
+    id_28 STRING,
+    id_31 STRING
+);

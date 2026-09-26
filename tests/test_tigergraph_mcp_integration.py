@@ -9,6 +9,7 @@ from src.agents.conflict_evaluator import ConflictEvaluatorAgent
 from src.agents.critic_agent import CriticAgent
 from src.agents.evidence_simulator import EvidenceSimulatorAgent
 from src.agents.policy_engine import PolicyEngineAgent
+from src.agents.coordinator import InvestigationCoordinator
 from src.data.real_data import STORE
 from src.graph.tigergraph_mcp_client import (
     EXPECTED_EDGES,
@@ -60,6 +61,36 @@ class IdOnlyMCPClient(FakeMCPClient):
             "v_type": "Transaction",
             "attributes": {"transaction_id": "T2"},
         }]
+
+
+class EnrichedMCPClient(FakeMCPClient):
+    def get_transaction(self, transaction_id):
+        self.calls.append(("transaction", transaction_id))
+        return {
+            "transaction_id": transaction_id,
+            "amount": 17.17,
+            "ts": "2016-07-02 01:01:12",
+            "risk_score": 0.31,
+            "channel": "online",
+            "product_cd": "C",
+            "device_type": "mobile",
+        }
+
+    def get_customer_transactions(self, customer_id, limit=100):
+        self.calls.append(("transactions", customer_id, limit))
+        return [{
+            "vertex_type": "Transaction",
+            "vertex_id": "3000093",
+            "attributes": {"transaction_id": "3000093", "amount": 17.17},
+        }]
+
+    def get_customer_cases(self, customer_id, limit=100):
+        self.calls.append(("cases", customer_id, limit))
+        return [{"vertex_type": "FraudCase", "vertex_id": "HHG-011"}]
+
+    def get_transaction_neighbors(self, transaction_id, limit=100):
+        self.calls.append(("neighbors", transaction_id, limit))
+        return []
 
 
 @pytest.mark.parametrize(
@@ -220,6 +251,75 @@ def test_mcp_downstream_stages_do_not_read_local_graph_or_csv(monkeypatch):
     assert "no customer was contacted" in context.simulated_responses[0]["message"]
     assert context.devil_advocate_verdict.startswith("UNABLE_TO_ASSESS_FROM_GRAPH")
     assert all(item.get("source") != "card_history" for item in context.evidence)
+
+
+def test_enriched_mcp_transaction_reaches_fastapi_answer_without_local_fallback(monkeypatch):
+    client = EnrichedMCPClient()
+    adapter = GraphAdapter(mode="mcp", mcp_client=client)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("MCP investigation must not fall back to local graph or CSV data")
+
+    monkeypatch.setattr(adapter.tg_client, "run_gsql_query", forbidden)
+    for method in (
+        "get_vertex", "query_out_of_region", "query_card_testing",
+        "query_device_ring_centrality",
+    ):
+        monkeypatch.setattr(adapter.in_memory, method, forbidden)
+    for method in (
+        "get_card_history", "get_flagged_txn", "get_identity", "get_case_pack",
+        "get_closed_cases", "closed_cases_by_pattern",
+    ):
+        monkeypatch.setattr(STORE, method, forbidden)
+
+    result = InvestigationCoordinator(adapter).investigate({
+        "case_id": "HHG-011",
+        "opened_at": "2016-07-02 01:01:12",
+        "trigger_type": "customer_report",
+        "trigger_text": "Customer reported an unauthorized transaction.",
+        "customer_id": "C11923",
+        "card_id": "C11923-K2",
+        "flagged_txn_id": "3000093",
+        "customer_response": "denied_transaction",
+    })
+
+    case = result["case"]
+    transaction_evidence = next(
+        item for item in case["evidence"] if item.get("signal") == "graph_transaction"
+    )
+    transaction = transaction_evidence["value"]
+    assert case["exposure_usd"] == 17.17
+    assert transaction == {
+        "transaction_id": "3000093",
+        "amount": 17.17,
+        "timestamp": "2016-07-02 01:01:12",
+        "risk_score": 0.31,
+        "channel": "online",
+        "ProductCD": "C",
+        "device_type": "mobile",
+    }
+    assert transaction_evidence["source"] == "tigergraph_mcp"
+    assert all(
+        token in transaction_evidence["claim"]
+        for token in ("amount=17.17", "timestamp=2016-07-02 01:01:12", "risk_score=0.31",
+                      "channel=online", "ProductCD=C")
+    )
+    signals = {item.get("signal") for item in case["evidence"]}
+    assert not {
+        "transaction_amount", "transaction_timestamp", "transaction_risk_score",
+        "transaction_channel", "transaction_product_code",
+    } & {
+        item.get("value", {}).get("signal")
+        for item in case["evidence"]
+        if item.get("signal") == "graph_signal_unavailable"
+    }
+    assert "risk_score_evaluation" in signals
+    assert case["uncertainty_level"]
+    assert case["devil_advocate_verdict"]
+    assert "innocent_explanation_score" in case
+    assert "alternative_hypotheses" in case
+    assert any(call == ("transaction", "3000093") for call in client.calls)
+    assert "HHG-011" in adapter.in_memory.case_memory
 
 
 def test_mcp_adapter_never_runs_legacy_graph_queries_or_writes(monkeypatch):
